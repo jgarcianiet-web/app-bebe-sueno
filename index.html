@@ -172,6 +172,31 @@
         <p id="baby-age" class="baby-age"></p>
       </div>
       <div class="card">
+        <h2>👨‍👩‍👧 Sincronización familiar</h2>
+        <div id="sync-inactive">
+          <p class="muted small">Comparte los registros con tu pareja: los dos podréis ver y añadir datos desde vuestros móviles. Uno crea el código familiar y el otro se une con el enlace de invitación.</p>
+          <div class="btn-row">
+            <button id="btn-sync-create" class="btn btn-primary">Crear código familiar</button>
+          </div>
+          <div class="form-row sync-join-row">
+            <label>¿Tu pareja ya creó uno? Pega aquí el código o el enlace
+              <input type="text" id="sync-join-code" placeholder="Código o enlace de invitación">
+            </label>
+            <button id="btn-sync-join" class="btn btn-outline">Unirme</button>
+          </div>
+        </div>
+        <div id="sync-active" class="hidden">
+          <p class="sync-status" id="sync-status"></p>
+          <div class="btn-row">
+            <button id="btn-sync-share" class="btn btn-primary">🔗 Compartir invitación</button>
+            <button id="btn-sync-now" class="btn btn-outline">🔄 Sincronizar ahora</button>
+            <button id="btn-sync-disconnect" class="btn btn-danger">Desconectar</button>
+          </div>
+          <p class="muted small sync-note">Los datos compartidos se guardan en un servicio externo (jsonblob.com) protegidos por un código aleatorio. Comparte la invitación solo con tu familia.</p>
+        </div>
+      </div>
+
+      <div class="card">
         <h2>⏰ Recordatorio de rutina</h2>
         <p class="muted small">Recibe un aviso a la hora de empezar la rutina de sueño (baño, cuento, luz tenue…). El aviso funciona mientras la app esté abierta en el navegador.</p>
         <form id="reminder-form" class="form">
@@ -210,6 +235,7 @@
   </nav>
 
   <script src="js/tips.js"></script>
+  <script src="js/sync.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>
