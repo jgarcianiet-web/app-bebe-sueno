@@ -1,11 +1,12 @@
 /* Service worker: permite usar la app sin conexión */
-const CACHE = "bebe-sueno-v2";
+const CACHE = "bebe-sueno-v3";
 const ASSETS = [
   "./",
   "./index.html",
   "./css/styles.css",
   "./js/app.js",
   "./js/tips.js",
+  "./js/sync.js",
   "./manifest.webmanifest",
   "./icons/icon.svg"
 ];
@@ -26,6 +27,8 @@ self.addEventListener("activate", (e) => {
 
 self.addEventListener("fetch", (e) => {
   if (e.request.method !== "GET") return;
+  // La API de sincronización nunca se cachea: siempre datos frescos
+  if (new URL(e.request.url).origin !== location.origin) return;
   e.respondWith(
     fetch(e.request)
       .then((res) => {

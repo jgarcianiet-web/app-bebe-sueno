@@ -14,9 +14,11 @@ function loadState() {
         baby: parsed.baby || { name: "", birthdate: "" },
         sessions: Array.isArray(parsed.sessions) ? parsed.sessions : [],
         feedings: Array.isArray(parsed.feedings) ? parsed.feedings : [],
+        deleted: Array.isArray(parsed.deleted) ? parsed.deleted : [],
         activeSession: parsed.activeSession || null,
         reminder: parsed.reminder || { enabled: false, time: "20:00" },
-        lastReminderDay: parsed.lastReminderDay || ""
+        lastReminderDay: parsed.lastReminderDay || "",
+        sync: parsed.sync || { id: null, lastSync: 0 }
       };
     }
   } catch (e) {
@@ -26,14 +28,17 @@ function loadState() {
     baby: { name: "", birthdate: "" },
     sessions: [],
     feedings: [],
+    deleted: [],
     activeSession: null,
     reminder: { enabled: false, time: "20:00" },
-    lastReminderDay: ""
+    lastReminderDay: "",
+    sync: { id: null, lastSync: 0 }
   };
 }
 
-function saveState() {
+function saveState(opts) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  if (!(opts && opts.noSync)) queueSync();
 }
 
 /* ---------- Utilidades ---------- */
@@ -160,6 +165,142 @@ function weeklyContext() {
   };
 }
 
+/* ---------- Sincronización familiar ---------- */
+
+let syncDebounce = null;
+let syncInFlight = false;
+
+function queueSync() {
+  if (!state.sync.id) return;
+  clearTimeout(syncDebounce);
+  syncDebounce = setTimeout(() => syncNow(), 2000);
+}
+
+function setSyncStatus(html) {
+  const el = $("sync-status");
+  if (el) el.innerHTML = html;
+}
+
+async function syncNow(interactive) {
+  if (!state.sync.id || syncInFlight) return;
+  syncInFlight = true;
+  setSyncStatus("🔄 Sincronizando…");
+  try {
+    const remote = await syncFetchRemote(state.sync.id);
+    const merged = mergeStates(state, remote || {});
+    state.baby = merged.baby;
+    state.reminder = merged.reminder;
+    state.sessions = merged.sessions;
+    state.feedings = merged.feedings;
+    state.deleted = merged.deleted;
+    await syncPushRemote(state.sync.id, buildSharedDoc(state));
+    state.sync.lastSync = Date.now();
+    saveState({ noSync: true });
+    renderAll();
+  } catch (e) {
+    console.warn("Error de sincronización", e);
+    if (e.notFound) {
+      setSyncStatus(
+        `<span class="err">El código familiar ya no existe en el servidor.</span> Pulsa "Desconectar" y crea uno nuevo (tus datos locales están a salvo).`
+      );
+      if (interactive) alert("El código familiar ya no existe en el servidor. Desconecta y crea uno nuevo; tus datos locales están a salvo.");
+    } else {
+      setSyncStatus(`<span class="err">Sin conexión con el servicio.</span> Se reintentará automáticamente; tus datos locales están a salvo.`);
+      if (interactive) alert("No se pudo sincronizar ahora (¿sin conexión?). Se reintentará automáticamente.");
+    }
+  } finally {
+    syncInFlight = false;
+  }
+}
+
+function inviteLink() {
+  return `${location.origin}${location.pathname}#unirse=${state.sync.id}`;
+}
+
+function parseJoinCode(input) {
+  let code = (input || "").trim();
+  const marker = "unirse=";
+  const idx = code.indexOf(marker);
+  if (idx !== -1) code = code.slice(idx + marker.length);
+  else if (code.includes("/")) code = code.split("/").pop();
+  code = code.replace(/[^A-Za-z0-9-]/g, "");
+  return code || null;
+}
+
+function renderSync() {
+  const active = !!state.sync.id;
+  $("sync-inactive").classList.toggle("hidden", active);
+  $("sync-active").classList.toggle("hidden", !active);
+  if (active) {
+    const last = state.sync.lastSync
+      ? new Date(state.sync.lastSync).toLocaleString("es-ES", {
+          day: "numeric", month: "short", hour: "2-digit", minute: "2-digit"
+        })
+      : "todavía no";
+    setSyncStatus(`<span class="ok">✓ Sincronización activada.</span> Última sincronización: ${last}.`);
+  }
+}
+
+async function createFamilyCode() {
+  const btn = $("btn-sync-create");
+  btn.disabled = true;
+  btn.textContent = "Creando…";
+  try {
+    const id = await syncCreateRemote(buildSharedDoc(state));
+    state.sync = { id, lastSync: Date.now() };
+    saveState({ noSync: true });
+    renderAll();
+    shareInvite(true);
+  } catch (e) {
+    console.warn(e);
+    alert("No se pudo crear el código familiar (¿sin conexión?). Inténtalo de nuevo en un momento.");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Crear código familiar";
+  }
+}
+
+async function joinFamily(rawCode, fromLink) {
+  const code = parseJoinCode(rawCode);
+  if (!code) {
+    alert("Ese código o enlace no parece válido.");
+    return;
+  }
+  if (state.sync.id === code) return;
+  const msg = fromLink
+    ? "Has abierto una invitación familiar. ¿Quieres unirte y combinar los registros?"
+    : "¿Unirte a esta familia y combinar los registros de ambos dispositivos?";
+  if (!confirm(msg)) return;
+  try {
+    await syncFetchRemote(code);
+  } catch (e) {
+    alert(e.notFound
+      ? "Ese código familiar no existe. Revisa el enlace o pide a tu pareja que cree uno nuevo."
+      : "No se pudo comprobar el código (¿sin conexión?). Inténtalo de nuevo.");
+    return;
+  }
+  state.sync = { id: code, lastSync: 0 };
+  saveState({ noSync: true });
+  await syncNow(true);
+  renderAll();
+  alert("¡Ya estáis sincronizados! 👨‍👩‍👧");
+}
+
+function shareInvite(afterCreate) {
+  const link = inviteLink();
+  const text = "Únete para registrar juntos el sueño de nuestro bebé 🌙";
+  if (navigator.share) {
+    navigator.share({ title: "Sueño Bebé", text, url: link }).catch(() => {});
+  } else if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(link).then(
+      () => alert((afterCreate ? "Código familiar creado ✔\n\n" : "") + "Enlace de invitación copiado. Envíaselo a tu pareja (por WhatsApp, por ejemplo):\n\n" + link),
+      () => prompt("Copia este enlace y envíaselo a tu pareja:", link)
+    );
+  } else {
+    prompt("Copia este enlace y envíaselo a tu pareja:", link);
+  }
+}
+
 /* ---------- Tomas ---------- */
 
 const FEEDING_LABELS = {
@@ -203,6 +344,7 @@ function attachFeedingDelete(item, feeding) {
   item.querySelector(".h-delete").addEventListener("click", () => {
     if (confirm("¿Eliminar esta toma?")) {
       state.feedings = state.feedings.filter((x) => x.id !== feeding.id);
+      state.deleted.push(feeding.id);
       saveState();
       renderAll();
     }
@@ -388,6 +530,7 @@ function renderHistory() {
       item.querySelector(".h-delete").addEventListener("click", () => {
         if (confirm("¿Eliminar este registro?")) {
           state.sessions = state.sessions.filter((x) => x.id !== s.id);
+          state.deleted.push(s.id);
           saveState();
           renderAll();
         }
@@ -490,6 +633,7 @@ function renderAll() {
   renderTips();
   renderProfile();
   renderReminder();
+  renderSync();
 }
 
 /* ---------- Navegación ---------- */
@@ -547,6 +691,7 @@ $("profile-form").addEventListener("submit", (e) => {
   e.preventDefault();
   state.baby.name = $("baby-name").value.trim();
   state.baby.birthdate = $("baby-birthdate").value;
+  state.baby.updatedAt = Date.now();
   saveState();
   renderAll();
   alert("Perfil guardado ✔");
@@ -560,6 +705,7 @@ $("reminder-form").addEventListener("submit", (e) => {
   e.preventDefault();
   state.reminder.time = $("reminder-time").value || "20:00";
   state.reminder.enabled = $("reminder-enabled").checked;
+  state.reminder.updatedAt = Date.now();
   saveState();
   if (state.reminder.enabled && "Notification" in window && Notification.permission === "default") {
     Notification.requestPermission();
@@ -571,6 +717,18 @@ $("reminder-form").addEventListener("submit", (e) => {
 
 $("banner-close").addEventListener("click", () => {
   $("reminder-banner").classList.add("hidden");
+});
+
+$("btn-sync-create").addEventListener("click", createFamilyCode);
+$("btn-sync-join").addEventListener("click", () => joinFamily($("sync-join-code").value, false));
+$("btn-sync-share").addEventListener("click", () => shareInvite(false));
+$("btn-sync-now").addEventListener("click", () => syncNow(true));
+$("btn-sync-disconnect").addEventListener("click", () => {
+  if (confirm("¿Desconectar la sincronización familiar? Tus datos seguirán en este dispositivo.")) {
+    state.sync = { id: null, lastSync: 0 };
+    saveState({ noSync: true });
+    renderAll();
+  }
 });
 
 $("btn-export").addEventListener("click", () => {
@@ -594,6 +752,22 @@ $("btn-delete-all").addEventListener("click", () => {
 renderAll();
 checkReminder();
 setInterval(checkReminder, 20000);
+
+// Invitación familiar abierta desde un enlace (#unirse=CODIGO)
+if (location.hash.startsWith("#unirse=")) {
+  const code = location.hash.slice("#unirse=".length);
+  history.replaceState(null, "", location.pathname + location.search);
+  joinFamily(code, true);
+}
+
+// Sincronización periódica mientras la app está visible
+if (state.sync.id) syncNow();
+setInterval(() => {
+  if (document.visibilityState === "visible") syncNow();
+}, 60000);
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") syncNow();
+});
 
 if ("serviceWorker" in navigator && location.protocol === "https:") {
   navigator.serviceWorker.register("sw.js").catch(() => {});

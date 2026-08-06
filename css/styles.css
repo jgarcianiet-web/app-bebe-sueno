@@ -213,6 +213,13 @@ main {
 .small { font-size: 0.78rem; line-height: 1.5; }
 .muted-card { background: transparent; box-shadow: none; border: 1px dashed var(--border); }
 
+.sync-join-row { margin-top: 14px; display: flex; align-items: flex-end; gap: 8px; }
+.sync-join-row label { flex: 1; min-width: 0; }
+.sync-status { font-size: 0.88rem; margin-bottom: 12px; }
+.sync-status .ok { color: #2e9e5b; font-weight: 600; }
+.sync-status .err { color: var(--danger); font-weight: 600; }
+.sync-note { margin-top: 12px; margin-bottom: 0; }
+
 .feedings-list { margin-top: 14px; }
 .feedings-list:empty { margin-top: 0; }
 

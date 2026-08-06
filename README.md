@@ -14,12 +14,15 @@ Aplicación web para ayudar a madres y padres a **controlar el sueño de su beb�
 - **Perfil del bebé**: nombre y fecha de nacimiento para ajustar las recomendaciones por edad (0–3 meses, 4–6, 7–11, 12–24, 2–5 años).
 - **Registro de tomas** 🍼: apunta cada toma (pecho, biberón o sólidos) con un toque; aparecen en el resumen del día y en el historial.
 - **Recordatorio de rutina** ⏰: aviso a la hora elegida para empezar la rutina de sueño (con notificación del navegador si se concede permiso; funciona mientras la app está abierta).
+- **Sincronización familiar** 👨‍👩‍👧: comparte los registros entre dos (o más) móviles. Uno crea el código familiar y comparte el enlace de invitación; a partir de ahí, lo que registre cualquiera de los dos se combina y aparece en ambos dispositivos (sincronización automática cada minuto y al hacer cambios).
 - **Exportación de datos** en JSON y borrado completo.
 - **PWA instalable**: funciona sin conexión y se puede añadir a la pantalla de inicio del móvil.
 
 ## 🔒 Privacidad
 
-Todos los datos se guardan **únicamente en el dispositivo** (localStorage del navegador). No se envía nada a ningún servidor.
+Por defecto, todos los datos se guardan **únicamente en el dispositivo** (localStorage del navegador) y no se envía nada a ningún servidor.
+
+Si activas la **sincronización familiar**, la copia compartida se guarda en [jsonblob.com](https://jsonblob.com) (almacén JSON gratuito) protegida por un código aleatorio imposible de adivinar: solo quien tenga el enlace de invitación puede acceder. Los datos locales siguen siendo la copia principal — si el servicio no está disponible, la app funciona igualmente y se sincroniza cuando vuelva la conexión.
 
 ## 🚀 Cómo usarla
 
@@ -47,6 +50,7 @@ python3 -m http.server 8000
 ├── index.html            # Estructura de la app (5 pestañas)
 ├── css/styles.css        # Estilos (modo claro y oscuro automático)
 ├── js/app.js             # Lógica: cronómetro, registros, estadísticas
+├── js/sync.js            # Sincronización familiar (combinación de datos)
 ├── js/tips.js            # Recomendaciones por edad y motor de consejos
 ├── manifest.webmanifest  # Manifiesto PWA
 ├── sw.js                 # Service worker (uso sin conexión)
