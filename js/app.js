@@ -13,13 +13,23 @@ function loadState() {
       return {
         baby: parsed.baby || { name: "", birthdate: "" },
         sessions: Array.isArray(parsed.sessions) ? parsed.sessions : [],
-        activeSession: parsed.activeSession || null
+        feedings: Array.isArray(parsed.feedings) ? parsed.feedings : [],
+        activeSession: parsed.activeSession || null,
+        reminder: parsed.reminder || { enabled: false, time: "20:00" },
+        lastReminderDay: parsed.lastReminderDay || ""
       };
     }
   } catch (e) {
     console.warn("No se pudo leer el almacenamiento local", e);
   }
-  return { baby: { name: "", birthdate: "" }, sessions: [], activeSession: null };
+  return {
+    baby: { name: "", birthdate: "" },
+    sessions: [],
+    feedings: [],
+    activeSession: null,
+    reminder: { enabled: false, time: "20:00" },
+    lastReminderDay: ""
+  };
 }
 
 function saveState() {
@@ -150,6 +160,99 @@ function weeklyContext() {
   };
 }
 
+/* ---------- Tomas ---------- */
+
+const FEEDING_LABELS = {
+  pecho: { icon: "🤱", label: "Pecho" },
+  biberon: { icon: "🍼", label: "Biberón" },
+  solidos: { icon: "🥄", label: "Sólidos" }
+};
+
+function addFeeding(type) {
+  state.feedings.push({
+    id: Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
+    type,
+    time: new Date().toISOString()
+  });
+  saveState();
+  renderAll();
+}
+
+function feedingsByDay() {
+  const map = {};
+  for (const f of state.feedings) {
+    const key = dayKey(f.time);
+    if (!map[key]) map[key] = [];
+    map[key].push(f);
+  }
+  return map;
+}
+
+function feedingItemHTML(f) {
+  const info = FEEDING_LABELS[f.type] || FEEDING_LABELS.biberon;
+  return `
+    <span class="h-icon">${info.icon}</span>
+    <div class="h-info">
+      <div class="h-title">Toma · ${info.label}</div>
+      <div class="h-detail">${formatTime(f.time)}</div>
+    </div>
+    <button class="h-delete" title="Eliminar toma" aria-label="Eliminar toma">✕</button>`;
+}
+
+function attachFeedingDelete(item, feeding) {
+  item.querySelector(".h-delete").addEventListener("click", () => {
+    if (confirm("¿Eliminar esta toma?")) {
+      state.feedings = state.feedings.filter((x) => x.id !== feeding.id);
+      saveState();
+      renderAll();
+    }
+  });
+}
+
+function renderFeedingsToday() {
+  const container = $("feedings-today");
+  container.innerHTML = "";
+  const today = (feedingsByDay()[dayKey(new Date())] || [])
+    .sort((a, b) => new Date(b.time) - new Date(a.time));
+  for (const f of today) {
+    const item = document.createElement("div");
+    item.className = "history-item";
+    item.innerHTML = feedingItemHTML(f);
+    attachFeedingDelete(item, f);
+    container.appendChild(item);
+  }
+}
+
+/* ---------- Recordatorio de rutina ---------- */
+
+function renderReminder() {
+  $("reminder-time").value = state.reminder.time || "20:00";
+  $("reminder-enabled").checked = !!state.reminder.enabled;
+}
+
+function checkReminder() {
+  const r = state.reminder;
+  if (!r.enabled || !r.time) return;
+  const now = new Date();
+  const [h, m] = r.time.split(":").map(Number);
+  const target = new Date(now);
+  target.setHours(h, m, 0, 0);
+  const key = dayKey(now);
+  if (now >= target && now - target < 10 * 60000 && state.lastReminderDay !== key) {
+    state.lastReminderDay = key;
+    saveState();
+    $("reminder-banner").classList.remove("hidden");
+    if ("Notification" in window && Notification.permission === "granted") {
+      try {
+        new Notification("🌙 Hora de la rutina de sueño", {
+          body: "Baño, pijama, cuento y luz tenue: es el momento de preparar a tu bebé para dormir.",
+          icon: "icons/icon.svg"
+        });
+      } catch (e) { /* algunos navegadores móviles no permiten Notification directa */ }
+    }
+  }
+}
+
 /* ---------- Cronómetro ---------- */
 
 function startSession(type) {
@@ -243,20 +346,33 @@ function renderDailyTip() {
 function renderHistory() {
   const container = $("history-list");
   container.innerHTML = "";
-  if (state.sessions.length === 0) {
+  if (state.sessions.length === 0 && state.feedings.length === 0) {
     container.innerHTML = `<p class="empty-state">Todavía no hay registros.<br>Usa el cronómetro o añade un registro manual desde Inicio.</p>`;
     return;
   }
   const byDay = sessionsByDay();
-  const keys = Object.keys(byDay).sort().reverse();
+  const feedsByDay = feedingsByDay();
+  const keys = [...new Set([...Object.keys(byDay), ...Object.keys(feedsByDay)])].sort().reverse();
   for (const key of keys) {
     const header = document.createElement("p");
     header.className = "history-day-header";
-    const m = dayMetrics(byDay[key]);
-    header.textContent = `${formatDayLabel(key)} · ${formatDuration(m.total)}`;
+    const daySessions = byDay[key] || [];
+    const dayFeedings = feedsByDay[key] || [];
+    const parts = [formatDayLabel(key)];
+    if (daySessions.length) parts.push(formatDuration(dayMetrics(daySessions).total));
+    if (dayFeedings.length) parts.push(`${dayFeedings.length} toma${dayFeedings.length > 1 ? "s" : ""}`);
+    header.textContent = parts.join(" · ");
     container.appendChild(header);
 
-    const sessions = [...byDay[key]].sort((a, b) => new Date(b.start) - new Date(a.start));
+    for (const f of [...dayFeedings].sort((a, b) => new Date(b.time) - new Date(a.time))) {
+      const item = document.createElement("div");
+      item.className = "history-item";
+      item.innerHTML = feedingItemHTML(f);
+      attachFeedingDelete(item, f);
+      container.appendChild(item);
+    }
+
+    const sessions = [...daySessions].sort((a, b) => new Date(b.start) - new Date(a.start));
     for (const s of sessions) {
       const item = document.createElement("div");
       item.className = "history-item";
@@ -367,11 +483,13 @@ function renderAll() {
   renderHeader();
   renderTimer();
   renderToday();
+  renderFeedingsToday();
   renderDailyTip();
   renderHistory();
   renderStats();
   renderTips();
   renderProfile();
+  renderReminder();
 }
 
 /* ---------- Navegación ---------- */
@@ -434,6 +552,27 @@ $("profile-form").addEventListener("submit", (e) => {
   alert("Perfil guardado ✔");
 });
 
+$("btn-feed-pecho").addEventListener("click", () => addFeeding("pecho"));
+$("btn-feed-biberon").addEventListener("click", () => addFeeding("biberon"));
+$("btn-feed-solidos").addEventListener("click", () => addFeeding("solidos"));
+
+$("reminder-form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  state.reminder.time = $("reminder-time").value || "20:00";
+  state.reminder.enabled = $("reminder-enabled").checked;
+  saveState();
+  if (state.reminder.enabled && "Notification" in window && Notification.permission === "default") {
+    Notification.requestPermission();
+  }
+  alert(state.reminder.enabled
+    ? `Recordatorio activado a las ${state.reminder.time} ✔`
+    : "Recordatorio desactivado.");
+});
+
+$("banner-close").addEventListener("click", () => {
+  $("reminder-banner").classList.add("hidden");
+});
+
 $("btn-export").addEventListener("click", () => {
   const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
   const a = document.createElement("a");
@@ -453,6 +592,8 @@ $("btn-delete-all").addEventListener("click", () => {
 /* ---------- Inicio ---------- */
 
 renderAll();
+checkReminder();
+setInterval(checkReminder, 20000);
 
 if ("serviceWorker" in navigator && location.protocol === "https:") {
   navigator.serviceWorker.register("sw.js").catch(() => {});

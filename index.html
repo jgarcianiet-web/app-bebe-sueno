@@ -17,6 +17,11 @@
     <p id="header-subtitle" class="subtitle"></p>
   </header>
 
+  <div id="reminder-banner" class="reminder-banner hidden">
+    <span>🌙 ¡Es la hora de la rutina de sueño! Baño, pijama, cuento y a dormir.</span>
+    <button id="banner-close" aria-label="Cerrar aviso">✕</button>
+  </div>
+
   <main id="main-content">
 
     <!-- ============ INICIO ============ -->
@@ -56,6 +61,17 @@
           <div class="goal-bar"><div id="goal-bar-fill" class="goal-bar-fill"></div></div>
           <p id="goal-text" class="goal-text"></p>
         </div>
+      </div>
+
+      <div class="card">
+        <h2>🍼 Tomas de hoy</h2>
+        <p class="muted small">Registra cada toma con un toque. La hora se guarda automáticamente.</p>
+        <div class="btn-row">
+          <button id="btn-feed-pecho" class="btn btn-outline">🤱 Pecho</button>
+          <button id="btn-feed-biberon" class="btn btn-outline">🍼 Biberón</button>
+          <button id="btn-feed-solidos" class="btn btn-outline">🥄 Sólidos</button>
+        </div>
+        <div id="feedings-today" class="history-list feedings-list"></div>
       </div>
 
       <div class="card">
@@ -155,6 +171,22 @@
         </form>
         <p id="baby-age" class="baby-age"></p>
       </div>
+      <div class="card">
+        <h2>⏰ Recordatorio de rutina</h2>
+        <p class="muted small">Recibe un aviso a la hora de empezar la rutina de sueño (baño, cuento, luz tenue…). El aviso funciona mientras la app esté abierta en el navegador.</p>
+        <form id="reminder-form" class="form">
+          <div class="form-row two-cols">
+            <label>Hora del aviso
+              <input type="time" id="reminder-time" value="20:00">
+            </label>
+            <label class="checkbox-label">Activado
+              <input type="checkbox" id="reminder-enabled">
+            </label>
+          </div>
+          <button type="submit" class="btn btn-primary">Guardar recordatorio</button>
+        </form>
+      </div>
+
       <div class="card">
         <h2>Datos</h2>
         <p class="muted">Todos los datos se guardan únicamente en este dispositivo.</p>

@@ -213,6 +213,40 @@ main {
 .small { font-size: 0.78rem; line-height: 1.5; }
 .muted-card { background: transparent; box-shadow: none; border: 1px dashed var(--border); }
 
+.feedings-list { margin-top: 14px; }
+.feedings-list:empty { margin-top: 0; }
+
+.checkbox-label { display: flex; flex-direction: column; }
+.checkbox-label input[type="checkbox"] {
+  width: 24px;
+  height: 24px;
+  margin-top: 10px;
+  accent-color: var(--primary);
+}
+
+.reminder-banner {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: var(--nap);
+  color: #3a2c10;
+  padding: 12px 16px;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.reminder-banner button {
+  background: none;
+  border: none;
+  font-size: 1rem;
+  cursor: pointer;
+  color: inherit;
+  padding: 4px 8px;
+}
+
 .tab-bar {
   position: fixed;
   bottom: 0;
