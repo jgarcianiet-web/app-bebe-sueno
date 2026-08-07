@@ -254,6 +254,24 @@ main {
   cursor: pointer;
 }
 .chip:active { background: var(--primary); color: #fff; }
+.chat-msg.typing { opacity: 0.6; font-style: italic; animation: typing-pulse 1.2s ease-in-out infinite; }
+@keyframes typing-pulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 0.85; } }
+.ai-settings summary { font-weight: 700; font-size: 0.95rem; cursor: pointer; padding: 2px 0; }
+.ai-settings p { margin-top: 10px; }
+.ai-settings .form-row { margin: 10px 0 12px; }
+.ai-settings label { display: block; font-size: 0.85rem; font-weight: 600; color: var(--text-muted); }
+.ai-settings input {
+  width: 100%;
+  min-width: 0;
+  margin-top: 4px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.95rem;
+}
+
 .chat-input-row { display: flex; gap: 8px; }
 .chat-input-row input {
   flex: 1;

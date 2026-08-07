@@ -291,13 +291,16 @@ function fallbackAnswer(ctx) {
   return out;
 }
 
+function hasRedFlag(rawText) {
+  const text = normalizeText(rawText);
+  return RED_FLAG_KEYWORDS.some((flag) => text.includes(flag));
+}
+
 function answerQuestion(rawText) {
   const text = normalizeText(rawText);
   const ctx = buildAssistantContext();
 
-  for (const flag of RED_FLAG_KEYWORDS) {
-    if (text.includes(flag)) return redFlagAnswer();
-  }
+  if (hasRedFlag(rawText)) return redFlagAnswer();
 
   let best = null;
   let bestScore = 0;
