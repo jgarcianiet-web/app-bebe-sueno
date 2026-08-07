@@ -1,5 +1,5 @@
 /* Service worker: permite usar la app sin conexión */
-const CACHE = "bebe-sueno-v3";
+const CACHE = "bebe-sueno-v4";
 const ASSETS = [
   "./",
   "./index.html",
@@ -7,6 +7,7 @@ const ASSETS = [
   "./js/app.js",
   "./js/tips.js",
   "./js/sync.js",
+  "./js/assistant.js",
   "./manifest.webmanifest",
   "./icons/icon.svg"
 ];
