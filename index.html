@@ -152,6 +152,20 @@
       <div id="general-tips"></div>
     </section>
 
+    <!-- ============ ASISTENTE ============ -->
+    <section id="view-asistente" class="view">
+      <div class="card">
+        <h2>🤖 Asistente de sueño</h2>
+        <p class="muted small">Pregúntame sobre el sueño de tu bebé: tengo en cuenta su edad y lo que está pasando ahora mismo. Soy orientativo y no sustituyo a tu pediatra.</p>
+        <div id="chat-log" class="chat-log" aria-live="polite"></div>
+        <div id="chat-chips" class="chat-chips"></div>
+        <form id="chat-form" class="chat-input-row">
+          <input type="text" id="chat-input" placeholder="Escribe tu pregunta…" autocomplete="off" maxlength="300">
+          <button type="submit" class="btn btn-primary" aria-label="Enviar pregunta">➤</button>
+        </form>
+      </div>
+    </section>
+
     <!-- ============ PERFIL ============ -->
     <section id="view-perfil" class="view">
       <div class="card">
@@ -231,11 +245,13 @@
     <button class="tab" data-view="historial"><span>📋</span>Historial</button>
     <button class="tab" data-view="stats"><span>📊</span>Gráficas</button>
     <button class="tab" data-view="consejos"><span>💡</span>Consejos</button>
+    <button class="tab" data-view="asistente"><span>🤖</span>Asistente</button>
     <button class="tab" data-view="perfil"><span>👶</span>Perfil</button>
   </nav>
 
   <script src="js/tips.js"></script>
   <script src="js/sync.js"></script>
+  <script src="js/assistant.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

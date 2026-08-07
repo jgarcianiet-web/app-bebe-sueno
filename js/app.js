@@ -636,6 +636,60 @@ function renderAll() {
   renderSync();
 }
 
+/* ---------- Asistente de sueño (chat) ---------- */
+
+const CHAT_SUGGESTIONS = [
+  "¿Qué está pasando ahora?",
+  "¿Cuánto debería dormir?",
+  "Se despierta mucho por la noche",
+  "Las siestas le duran 30 minutos",
+  "¿Cómo mejoro la rutina?",
+  "Solo se duerme en brazos"
+];
+
+function chatMessageHTML(text) {
+  const escaped = text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+  return escaped.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+}
+
+function addChatMessage(text, who) {
+  const log = $("chat-log");
+  const msg = document.createElement("div");
+  msg.className = `chat-msg ${who}`;
+  msg.innerHTML = chatMessageHTML(text);
+  log.appendChild(msg);
+  log.scrollTop = log.scrollHeight;
+}
+
+function askAssistant(question) {
+  addChatMessage(question, "user");
+  // Pequeña pausa para que la respuesta se sienta natural
+  setTimeout(() => addChatMessage(answerQuestion(question), "bot"), 250);
+}
+
+function initAssistant() {
+  addChatMessage(assistantWelcome(), "bot");
+  const chips = $("chat-chips");
+  for (const suggestion of CHAT_SUGGESTIONS) {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "chip";
+    chip.textContent = suggestion;
+    chip.addEventListener("click", () => askAssistant(suggestion));
+    chips.appendChild(chip);
+  }
+  $("chat-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const text = $("chat-input").value.trim();
+    if (!text) return;
+    $("chat-input").value = "";
+    askAssistant(text);
+  });
+}
+
 /* ---------- Navegación ---------- */
 
 document.querySelectorAll(".tab").forEach((tab) => {
@@ -750,6 +804,7 @@ $("btn-delete-all").addEventListener("click", () => {
 /* ---------- Inicio ---------- */
 
 renderAll();
+initAssistant();
 checkReminder();
 setInterval(checkReminder, 20000);
 
