@@ -15,6 +15,7 @@ Aplicación web para ayudar a madres y padres a **controlar el sueño de su beb�
 - **Registro de tomas** 🍼: apunta cada toma (pecho, biberón o sólidos) con un toque; aparecen en el resumen del día y en el historial.
 - **Recordatorio de rutina** ⏰: aviso a la hora elegida para empezar la rutina de sueño (con notificación del navegador si se concede permiso; funciona mientras la app está abierta).
 - **Asistente de sueño** 🤖: un chat experto al que preguntarle en cualquier momento ("se despierta mucho", "¿cuánto debería dormir?", "solo se duerme en brazos"...). Responde según la edad del bebé y lo que está pasando ahora mismo (sesión en curso, registros de hoy, patrones de la semana), detecta señales de alarma que remite al pediatra, y funciona sin conexión y sin enviar datos a nadie.
+- **Modo IA avanzado** ✨ (opcional): guardando tu propia clave de API de Anthropic en los ajustes del asistente, las respuestas las genera **Claude** con todo el contexto del bebé y memoria de la conversación. La clave se guarda solo en el dispositivo (nunca se sincroniza ni se exporta), las señales de alarma se siguen detectando localmente, y ante cualquier fallo el asistente vuelve automáticamente al modo básico gratuito.
 - **Sincronización familiar** 👨‍👩‍👧: comparte los registros entre dos (o más) móviles. Uno crea el código familiar y comparte el enlace de invitación; a partir de ahí, lo que registre cualquiera de los dos se combina y aparece en ambos dispositivos (sincronización automática cada minuto y al hacer cambios).
 - **Exportación de datos** en JSON y borrado completo.
 - **PWA instalable**: funciona sin conexión y se puede añadir a la pantalla de inicio del móvil.
@@ -52,6 +53,7 @@ python3 -m http.server 8000
 ├── css/styles.css        # Estilos (modo claro y oscuro automático)
 ├── js/app.js             # Lógica: cronómetro, registros, estadísticas
 ├── js/assistant.js       # Asistente de sueño (chat experto con contexto)
+├── js/ai.js              # Modo IA opcional (Claude vía API de Anthropic)
 ├── js/sync.js            # Sincronización familiar (combinación de datos)
 ├── js/tips.js            # Recomendaciones por edad y motor de consejos
 ├── manifest.webmanifest  # Manifiesto PWA

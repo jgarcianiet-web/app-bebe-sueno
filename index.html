@@ -164,6 +164,26 @@
           <button type="submit" class="btn btn-primary" aria-label="Enviar pregunta">➤</button>
         </form>
       </div>
+
+      <div class="card">
+        <details class="ai-settings">
+          <summary>✨ Modo IA avanzado (opcional)</summary>
+          <p class="muted small">Con una clave de API de Anthropic, las respuestas las genera la IA <strong>Claude</strong> con todo el contexto de tu bebé y memoria de la conversación. Consigue tu clave en <strong>console.anthropic.com</strong> (requiere cuenta y crédito de pago por uso; cada pregunta cuesta céntimos).</p>
+          <p class="muted small">La clave se guarda solo en este dispositivo — nunca se sincroniza ni se exporta. Al usar el Modo IA, tu pregunta y el contexto del bebé se envían a Anthropic para generar la respuesta. Las señales de alarma médicas se detectan siempre en el dispositivo.</p>
+          <div id="ai-setup">
+            <div class="form-row">
+              <label>Clave de API
+                <input type="password" id="ai-key-input" placeholder="sk-ant-..." autocomplete="off">
+              </label>
+            </div>
+            <button id="btn-ai-save" class="btn btn-primary">Activar Modo IA</button>
+          </div>
+          <div id="ai-active" class="hidden">
+            <p class="sync-status"><span class="ok">✨ Modo IA activado.</span> Las respuestas las genera Claude.</p>
+            <button id="btn-ai-remove" class="btn btn-danger">Quitar clave y desactivar</button>
+          </div>
+        </details>
+      </div>
     </section>
 
     <!-- ============ PERFIL ============ -->
@@ -252,6 +272,7 @@
   <script src="js/tips.js"></script>
   <script src="js/sync.js"></script>
   <script src="js/assistant.js"></script>
+  <script src="js/ai.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

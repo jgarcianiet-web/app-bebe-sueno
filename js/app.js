@@ -662,12 +662,50 @@ function addChatMessage(text, who) {
   msg.innerHTML = chatMessageHTML(text);
   log.appendChild(msg);
   log.scrollTop = log.scrollHeight;
+  return msg;
 }
 
-function askAssistant(question) {
+let assistantBusy = false;
+
+async function askAssistant(question) {
+  if (assistantBusy) return;
   addChatMessage(question, "user");
-  // Pequeña pausa para que la respuesta se sienta natural
-  setTimeout(() => addChatMessage(answerQuestion(question), "bot"), 250);
+
+  // Las señales de alarma se responden siempre en el dispositivo, sin IA
+  if (hasRedFlag(question)) {
+    setTimeout(() => addChatMessage(redFlagAnswer(), "bot"), 250);
+    return;
+  }
+
+  if (!aiEnabled()) {
+    // Motor experto local (gratis y sin conexión)
+    setTimeout(() => addChatMessage(answerQuestion(question), "bot"), 250);
+    return;
+  }
+
+  assistantBusy = true;
+  const typing = addChatMessage("✨ Pensando…", "bot");
+  typing.classList.add("typing");
+  try {
+    const answer = await askClaude(question);
+    typing.remove();
+    addChatMessage(answer, "bot");
+  } catch (e) {
+    console.warn("Fallo del Modo IA", e);
+    typing.remove();
+    addChatMessage(
+      `${answerQuestion(question)}\n\n(⚠️ ${aiErrorMessage(e)} Esta respuesta es del modo básico.)`,
+      "bot"
+    );
+  } finally {
+    assistantBusy = false;
+  }
+}
+
+function renderAISettings() {
+  const enabled = aiEnabled();
+  $("ai-setup").classList.toggle("hidden", enabled);
+  $("ai-active").classList.toggle("hidden", !enabled);
 }
 
 function initAssistant() {
@@ -687,6 +725,26 @@ function initAssistant() {
     if (!text) return;
     $("chat-input").value = "";
     askAssistant(text);
+  });
+
+  renderAISettings();
+  $("btn-ai-save").addEventListener("click", () => {
+    const key = $("ai-key-input").value.trim();
+    if (!key.startsWith("sk-ant-")) {
+      alert("Esa clave no parece válida: debe empezar por sk-ant-...");
+      return;
+    }
+    aiSetKey(key);
+    $("ai-key-input").value = "";
+    renderAISettings();
+    addChatMessage("✨ Modo IA activado: a partir de ahora tus preguntas las responde Claude con el contexto de tu bebé. Si algo falla, volveré automáticamente al modo básico.", "bot");
+  });
+  $("btn-ai-remove").addEventListener("click", () => {
+    if (confirm("¿Quitar la clave y volver al modo básico?")) {
+      aiClearKey();
+      renderAISettings();
+      addChatMessage("Modo IA desactivado. Sigo aquí con el modo básico. 🙂", "bot");
+    }
   });
 }
 
