@@ -43,34 +43,76 @@ Desde el móvil, abre esa dirección y usa "Añadir a pantalla de inicio" para i
 npm run serve        # sirve www/ en http://localhost:8765
 ```
 
-## 📱 Compilar las apps nativas
+## 📱 Las apps nativas se compilan solas en GitHub
 
-Los proyectos nativos (`android/` y `ios/`) ya están generados y versionados en el repositorio. El código de la app vive en `www/`: después de cambiar algo ahí, ejecuta `npx cap sync` para copiarlo a los dos proyectos.
+No hace falta instalar nada ni tener un Mac: **GitHub Actions compila las dos apps** con cada cambio en `main`, igual que despliega la web.
+
+| Workflow | Qué hace | Dónde queda el resultado |
+|---|---|---|
+| `deploy-pages.yml` | Publica la web | https://jgarcianiet-web.github.io/app-bebe-sueno/ |
+| `build-android.yml` | Compila el APK de Android | [Descarga directa](../../releases/tag/app-android) |
+| `build-ios.yml` | Compila la app de iOS | Artefactos de la ejecución |
+
+### 🤖 Android — instalación en un toque
+
+Cada compilación publica el APK en la versión [**app-android**](../../releases/tag/app-android), que siempre apunta a la última.
+
+1. Abre esa página **desde el móvil Android**.
+2. Descarga `sueno-bebe.apk` y ábrelo.
+3. Android pedirá permiso para instalar apps de esa procedencia: acéptalo.
+
+Es una compilación de prueba firmada con la clave de depuración: perfecta para usarla en familia sin pasar por Google Play.
+
+### 🍎 iOS — la limitación de Apple
+
+El workflow compila la app y genera un `.ipa`, pero **Apple no permite instalar una app en un iPhone sin firmarla** con una cuenta de desarrollador. No es algo que GitHub pueda saltarse. Dos opciones:
+
+- **Apple Developer Program** (~99 $/año): añade los secretos de abajo y el mismo workflow generará el `.ipa` firmado, listo para TestFlight y la App Store.
+- **Sideloadly o AltStore** con un Apple ID gratuito: descargas el `.ipa` sin firmar de los artefactos y esas herramientas lo firman desde un ordenador e instalan en el iPhone, con renovación cada 7 días.
+
+Mientras tanto, en el iPhone la versión web funciona con "Añadir a pantalla de inicio".
+
+### 🔐 Publicar en las tiendas
+
+Los workflows ya contemplan la firma: en cuanto el repositorio tenga los secretos configurados (**Settings → Secrets and variables → Actions**), pasan a generar también los archivos firmados. Sin ellos siguen funcionando igual, solo que sin la parte de firma.
+
+**Google Play** (cuenta de desarrollador: pago único de ~25 $) — genera el almacén de claves una vez y guárdalo a buen recaudo, porque no se puede sustituir después:
 
 ```bash
-npm install          # una sola vez
-npx cap sync         # copia www/ a los proyectos nativos
+keytool -genkey -v -keystore sueno-bebe.keystore -alias sueno-bebe \
+  -keyalg RSA -keysize 2048 -validity 10000
+base64 -w0 sueno-bebe.keystore     # el resultado va en ANDROID_KEYSTORE_BASE64
 ```
 
-### Android
+| Secreto | Contenido |
+|---|---|
+| `ANDROID_KEYSTORE_BASE64` | El almacén de claves en base64 |
+| `ANDROID_KEYSTORE_PASSWORD` | Contraseña del almacén |
+| `ANDROID_KEY_ALIAS` | `sueno-bebe` |
+| `ANDROID_KEY_PASSWORD` | Contraseña de la clave |
 
-Requiere [Android Studio](https://developer.android.com/studio) (Windows, Mac o Linux).
+Con eso, cada compilación genera además `sueno-bebe-play.aab` para subir a [Google Play Console](https://play.google.com/console).
+
+**App Store** (Apple Developer Program: ~99 $/año):
+
+| Secreto | Contenido |
+|---|---|
+| `APPLE_CERTIFICATE_BASE64` | Certificado de distribución (`.p12`) en base64 |
+| `APPLE_CERTIFICATE_PASSWORD` | Contraseña del `.p12` |
+| `APPLE_PROVISIONING_PROFILE_BASE64` | Perfil de aprovisionamiento en base64 |
+| `APPLE_TEAM_ID` | Identificador del equipo de desarrollo |
+
+### 💻 Compilar en local (opcional)
+
+Si algún día quieres compilarlas tú, los proyectos nativos están en `android/` e `ios/`:
 
 ```bash
-npm run android      # sincroniza y abre el proyecto en Android Studio
+npm install
+npm run android      # abre el proyecto en Android Studio
+npm run ios          # abre el proyecto en Xcode (requiere Mac)
 ```
 
-En Android Studio: **Run ▶** para instalarla en un móvil conectado o en el emulador. Para publicar en Google Play, genera un bundle firmado con **Build → Generate Signed Bundle / APK → Android App Bundle**, y súbelo en [Google Play Console](https://play.google.com/console) (cuenta de desarrollador: pago único de ~25 $).
-
-### iOS
-
-Requiere un **Mac** con [Xcode](https://developer.apple.com/xcode/) y CocoaPods (`sudo gem install cocoapods`).
-
-```bash
-npm run ios          # sincroniza y abre el proyecto en Xcode
-```
-
-En Xcode: selecciona tu equipo de desarrollo en **Signing & Capabilities** y pulsa **Run ▶**. Para publicar en la App Store, usa **Product → Archive → Distribute App** (se necesita el Apple Developer Program: ~99 $/año).
+El código de la app vive en `www/`; tras cambiar algo, `npx cap sync` lo copia a los dos proyectos (los workflows ya lo hacen solos).
 
 ### Qué cambia en nativo
 
