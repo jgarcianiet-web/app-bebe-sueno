@@ -23,6 +23,7 @@ jobs:
   build:
     name: Compilar para iPhone
     runs-on: macos-latest
+    timeout-minutes: 45
     steps:
       - name: Descargar el código
         uses: actions/checkout@v4
