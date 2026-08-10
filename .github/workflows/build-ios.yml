@@ -1,0 +1,156 @@
+name: Compilar app de iOS
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'www/**'
+      - 'ios/**'
+      - 'capacitor.config.json'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/build-ios.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-build
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Compilar para iPhone
+    runs-on: macos-latest
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@v4
+
+      - name: Preparar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Copiar la app web e instalar los Pods
+        run: npx cap sync ios
+
+      # Compila la app real para iPhone. Sin firmar no se puede instalar
+      # directamente desde el móvil (es una restricción de Apple), pero
+      # verifica que todo compila y produce un .ipa reutilizable.
+      - name: Compilar la app
+        working-directory: ios/App
+        run: |
+          xcodebuild \
+            -workspace App.xcworkspace \
+            -scheme App \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/App.xcarchive" \
+            MARKETING_VERSION=1.0.${{ github.run_number }} \
+            CURRENT_PROJECT_VERSION=${{ github.run_number }} \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM="" \
+            archive
+
+      - name: Empaquetar el .ipa sin firmar
+        run: |
+          cd "$RUNNER_TEMP"
+          mkdir -p Payload
+          cp -R App.xcarchive/Products/Applications/App.app Payload/
+          zip -qry "$GITHUB_WORKSPACE/sueno-bebe-sin-firmar.ipa" Payload
+          ls -lh "$GITHUB_WORKSPACE/sueno-bebe-sin-firmar.ipa"
+
+      - name: Guardar como artefacto
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-ios-sin-firmar
+          path: sueno-bebe-sin-firmar.ipa
+          retention-days: 30
+
+      # ---- Vía App Store / TestFlight ----
+      # Se activa sola en cuanto el repositorio tenga configurados los secretos
+      # de una cuenta del Apple Developer Program (ver README).
+      - name: ¿Hay certificado de Apple configurado?
+        id: firma
+        run: echo "hay_certificado=${{ secrets.APPLE_CERTIFICATE_BASE64 != '' }}" >> "$GITHUB_OUTPUT"
+
+      - name: Instalar certificado y perfil de aprovisionamiento
+        if: steps.firma.outputs.hay_certificado == 'true'
+        env:
+          CERT: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+          CERT_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          PROFILE: ${{ secrets.APPLE_PROVISIONING_PROFILE_BASE64 }}
+        run: |
+          LLAVERO="$RUNNER_TEMP/firma.keychain-db"
+          CLAVE=$(uuidgen)
+          security create-keychain -p "$CLAVE" "$LLAVERO"
+          security set-keychain-settings -lut 21600 "$LLAVERO"
+          security unlock-keychain -p "$CLAVE" "$LLAVERO"
+          echo "$CERT" | base64 -d > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -P "$CERT_PASSWORD" -A -t cert -f pkcs12 -k "$LLAVERO"
+          security set-key-partition-list -S apple-tool:,apple: -k "$CLAVE" "$LLAVERO" >/dev/null
+          security list-keychain -d user -s "$LLAVERO"
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          echo "$PROFILE" | base64 -d > ~/Library/MobileDevice/Provisioning\ Profiles/perfil.mobileprovision
+
+      - name: Exportar el .ipa firmado
+        if: steps.firma.outputs.hay_certificado == 'true'
+        working-directory: ios/App
+        run: |
+          xcodebuild \
+            -workspace App.xcworkspace \
+            -scheme App \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/AppFirmada.xcarchive" \
+            MARKETING_VERSION=1.0.${{ github.run_number }} \
+            CURRENT_PROJECT_VERSION=${{ github.run_number }} \
+            DEVELOPMENT_TEAM="${{ secrets.APPLE_TEAM_ID }}" \
+            archive
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>export</string>
+          </dict></plist>
+          PLIST
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/AppFirmada.xcarchive" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+            -exportPath "$RUNNER_TEMP/export"
+          cp "$RUNNER_TEMP/export"/*.ipa "$GITHUB_WORKSPACE/sueno-bebe.ipa"
+
+      - name: Guardar el .ipa firmado
+        if: steps.firma.outputs.hay_certificado == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-ios-firmada
+          path: sueno-bebe.ipa
+          retention-days: 30
+
+      - name: Resumen
+        run: |
+          {
+            echo "## ✅ App de iOS compilada correctamente"
+            echo ""
+            if [ "${{ steps.firma.outputs.hay_certificado }}" = "true" ]; then
+              echo "El \`.ipa\` **firmado** está en los artefactos de esta ejecución, listo para subir a TestFlight."
+            else
+              echo "El \`.ipa\` está en los artefactos de esta ejecución, pero **sin firmar**."
+              echo ""
+              echo "Apple no permite instalar una app en un iPhone sin firmarla. Para instalarla hace falta una de estas dos cosas:"
+              echo ""
+              echo "- **Apple Developer Program** (~99 \$/año): al añadir los secretos al repositorio, este mismo workflow generará el \`.ipa\` firmado para TestFlight y la App Store."
+              echo "- **Sideloadly o AltStore** con un Apple ID gratuito: firman el \`.ipa\` en tu ordenador y lo instalan en el iPhone durante 7 días."
+              echo ""
+              echo "Mientras tanto, en el iPhone se puede usar la versión web con \"Añadir a pantalla de inicio\"."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

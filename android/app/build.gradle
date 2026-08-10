@@ -1,5 +1,11 @@
 apply plugin: 'com.android.application'
 
+// La compilación en GitHub Actions inyecta la versión y, si el repositorio
+// tiene configurada la clave de firma, también los datos del almacén.
+def ciVersionCode = System.getenv("ANDROID_VERSION_CODE")
+def ciVersionName = System.getenv("ANDROID_VERSION_NAME")
+def keystorePath = System.getenv("ANDROID_KEYSTORE_PATH")
+
 android {
     namespace "com.suenobebe.app"
     compileSdk rootProject.ext.compileSdkVersion
@@ -7,8 +13,8 @@ android {
         applicationId "com.suenobebe.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode ciVersionCode ? ciVersionCode.toInteger() : 1
+        versionName ciVersionName ?: "1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -16,10 +22,25 @@ android {
             ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        if (keystorePath) {
+            release {
+                storeFile file(keystorePath)
+                storePassword System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                keyAlias System.getenv("ANDROID_KEY_ALIAS")
+                keyPassword System.getenv("ANDROID_KEY_PASSWORD")
+            }
+        }
+    }
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            // Sin clave configurada, la versión de publicación queda sin firmar
+            // (la app de prueba que se instala en el móvil es la de depuración).
+            if (keystorePath) {
+                signingConfig signingConfigs.release
+            }
         }
     }
 }
