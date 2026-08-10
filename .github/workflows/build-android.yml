@@ -23,6 +23,11 @@ jobs:
   build:
     name: Generar APK instalable
     runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      # El proyecto trae 1,5 GB de heap por defecto, insuficiente para el
+      # runner y causa de compilaciones interminables por recolección de basura.
+      GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx5g -Dorg.gradle.daemon=false -Dkotlin.compiler.execution.strategy=in-process
     steps:
       - name: Descargar el código
         uses: actions/checkout@v4
@@ -39,8 +44,21 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Preparar Gradle
-        uses: gradle/actions/setup-gradle@v4
+      - name: Preparar el SDK de Android
+        run: |
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
+          "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0" > /dev/null || true
+          echo "SDK preparado en $ANDROID_HOME"
+
+      - name: Caché de Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('android/**/*.gradle', 'android/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: gradle-${{ runner.os }}-
 
       - name: Instalar dependencias
         run: npm ci
@@ -59,7 +77,8 @@ jobs:
       # APK de prueba: se instala directamente en el móvil sin pasar por Google Play.
       - name: Compilar APK de prueba
         working-directory: android
-        run: ./gradlew --no-daemon assembleDebug
+        timeout-minutes: 25
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
         env:
           ANDROID_VERSION_CODE: ${{ github.run_number }}
           ANDROID_VERSION_NAME: 1.0.${{ github.run_number }}
@@ -68,7 +87,8 @@ jobs:
       - name: Compilar bundle firmado para Google Play
         if: steps.firma.outputs.hay_clave == 'true'
         working-directory: android
-        run: ./gradlew --no-daemon bundleRelease
+        timeout-minutes: 25
+        run: ./gradlew bundleRelease --no-daemon --stacktrace
         env:
           ANDROID_VERSION_CODE: ${{ github.run_number }}
           ANDROID_VERSION_NAME: 1.0.${{ github.run_number }}
