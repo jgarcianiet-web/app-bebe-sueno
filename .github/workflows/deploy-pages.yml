@@ -30,7 +30,7 @@ jobs:
       - name: Subir la web
         uses: actions/upload-pages-artifact@v3
         with:
-          path: .
+          path: ./www
       - name: Desplegar
         id: deployment
         uses: actions/deploy-pages@v4

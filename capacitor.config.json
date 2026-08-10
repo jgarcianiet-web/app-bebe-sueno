@@ -1,0 +1,24 @@
+{
+  "appId": "com.suenobebe.app",
+  "appName": "Sueño Bebé",
+  "webDir": "www",
+  "android": {
+    "backgroundColor": "#F4F5FB"
+  },
+  "ios": {
+    "backgroundColor": "#F4F5FB",
+    "contentInset": "always"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchAutoHide": false,
+      "backgroundColor": "#5B6EE1",
+      "androidSplashResourceName": "splash",
+      "showSpinner": false
+    },
+    "LocalNotifications": {
+      "smallIcon": "ic_stat_icon",
+      "iconColor": "#5B6EE1"
+    }
+  }
+}
