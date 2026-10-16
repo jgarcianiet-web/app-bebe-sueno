@@ -4,14 +4,17 @@
  * (por ejemplo, en la pista).
  */
 
-const CACHE = "padel-v1";
+const CACHE = "padel-v2";
 const SHELL = [
   "./",
   "index.html",
   "manifest.webmanifest",
   "css/styles.css",
   "icons/icon.svg",
+  "vendor/supabase.js",
   "js/app.js",
+  "js/config.js",
+  "js/remote.js",
   "js/store.js",
   "js/level.js",
   "js/affinity.js",

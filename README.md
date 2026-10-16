@@ -50,20 +50,35 @@ npm run serve   # abre http://localhost:8765
 npm test        # tests de la lógica (nivel, afinidad, marcador, torneos y avisos)
 ```
 
-## ⚠️ Estado actual: prototipo en el dispositivo
+En `main`, la app se publica automáticamente en GitHub Pages: https://jgarcianiet-web.github.io/app-bebe-sueno/
 
-Los datos se guardan **solo en el móvil** (localStorage). Mientras no haya servidor, **la comunidad es de demostración**: al crear tu perfil se generan jugadores y partidos en tu zona para poder probar todos los flujos. Los "me gusta" de vuelta también son simulados, aunque son más probables cuanta más afinidad hay.
+## ☁️ Servidor (Supabase)
 
-## 🗺️ Próximas fases
+Las cuentas, los perfiles, los "me gusta", los matches, los partidos y los niveles viven en **Supabase**. Los torneos, el diario y el marcador se guardan, de momento, solo en el dispositivo.
 
-1. **Servidor y cuentas reales** (por ejemplo, Supabase): registro, jugadores y partidos compartidos, matches reales y chat entre matches.
-2. **Notificaciones push reales** y empaquetado nativo con Capacitor (iOS y Android) para las tiendas.
-3. **Monetización:**
-   - **Premium para jugadores:** ver quién te ha dado "me gusta", "me gusta" ilimitados, estadísticas avanzadas.
-   - **Plan para clubes y organizadores:** torneos ilimitados, inscripciones con pago y ranking del club.
-   - Comisión por inscripción a torneos.
-4. **Marcador en el reloj** (Wear OS / watchOS).
-5. **Análisis de vídeo con IA** de los partidos.
+La URL del proyecto y la clave *publishable* están en `www/js/config.js`. Esa clave es pública por diseño. **Nunca pongas ahí una clave `secret` o `service_role`.**
+
+### Puesta en marcha (una sola vez)
+
+1. **Crear las tablas:** en el panel de Supabase, abre **SQL Editor** → **New query**, pega el contenido de [`supabase/schema.sql`](supabase/schema.sql) y pulsa **Run**. Se puede volver a ejecutar sin perder datos.
+2. **Direcciones de la app:** en **Authentication → URL Configuration**:
+   - Pon como **Site URL** la dirección donde está publicada la app, por ejemplo `https://jgarcianiet-web.github.io/app-bebe-sueno/`.
+   - Añade esa misma dirección en **Redirect URLs**.
+
+   Así, el enlace del email de confirmación lleva a la app.
+
+### Seguridad
+
+- Todas las tablas tienen *Row Level Security*.
+- Cada jugador solo edita su perfil y solo ve sus propios "me gusta". Nadie puede ver quién le ha dado "me gusta" sin que haya match.
+- Crear partidos, apuntarse, salir, cancelar y apuntar resultados se hace mediante funciones del servidor, que comprueban las reglas: hueco libre, partido futuro, solo invitar a tus matches…
+- **El nivel lo calcula el servidor** con la misma fórmula que `www/js/level.js`. Tras el primer partido, nadie puede cambiárselo a mano.
+
+### Limitaciones conocidas
+
+- Cualquiera de los cuatro jugadores puede apuntar el resultado, y no hace falta que los rivales lo confirmen.
+- Los datos se actualizan cada minuto y al volver a la app (todavía no en tiempo real).
+- Aún no hay recuperación de contraseña desde la app.
 
 ## 📁 Estructura
 
@@ -72,11 +87,15 @@ www/
   index.html, manifest.webmanifest, sw.js   PWA instalable y con funcionamiento sin conexión
   css/styles.css                             Estilos (modo claro y oscuro)
   js/app.js                                  Interfaz y navegación
-  js/store.js                                Estado, guardado y comunidad de demostración
+  js/config.js                               URL y clave pública de Supabase
+  js/remote.js                               Acceso al servidor: cuentas, perfiles, matches y partidos
+  js/store.js                                Datos guardados en el dispositivo (torneos, diario…)
   js/level.js                                Nivel 1–7 y ajuste por resultado
   js/affinity.js                             Afinidad entre jugadores
   js/scoring.js                              Reglas del marcador
   js/tournaments.js                          Americano, liga y eliminatoria
   js/alerts.js                               Avisos de partidos
+  vendor/supabase.js                         Librería de Supabase (incluida para funcionar sin CDN)
+supabase/schema.sql                          Tablas, reglas de seguridad y funciones del servidor
 tests/logic.test.js                          Tests de la lógica
 ```

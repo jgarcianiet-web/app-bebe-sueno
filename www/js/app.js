@@ -1,6 +1,7 @@
-import { loadState, saveState, clearState, seedCommunity, uid, isoDate, ZONES, clubsFor } from "./store.js";
-import { levelChanges, levelLabel, roundLevel, RELIABLE_AFTER, LEVEL_MIN, LEVEL_MAX } from "./level.js";
-import { affinity, likesBack, OBJECTIVES, AVAILABILITY, POSITIONS, labelOf } from "./affinity.js";
+import { loadLocal, saveLocal, clearLocal, defaultLocal, uid, isoDate, ZONES, clubsFor } from "./store.js";
+import { validateResult, levelLabel, roundLevel, RELIABLE_AFTER, LEVEL_MIN, LEVEL_MAX } from "./level.js";
+import { affinity, OBJECTIVES, AVAILABILITY, POSITIONS, labelOf } from "./affinity.js";
+import * as remote from "./remote.js";
 import { createScorer, addPoint, pointLabels, situation, percent, deuceMode, DEUCE_MODES } from "./scoring.js";
 import {
   americanoSchedule, americanoDefaultRounds, americanoStandings, roundRobin, leagueStandings,
@@ -8,9 +9,20 @@ import {
 } from "./tournaments.js";
 import { computeAlerts, formatWhen, gameDate, freeSlots, levelRangeText } from "./alerts.js";
 
-let state = loadState();
+/** Sesión de Supabase (null si no hay nadie dentro). */
+let session = null;
+
+function emptyState() {
+  return { profile: null, players: [], games: [], swipes: {}, connections: [], ...defaultLocal() };
+}
+
+let state = emptyState();
 
 const ui = {
+  loading: true,
+  loadError: null,
+  authMode: "login",
+  authNotice: null,
   tab: "descubrir",
   gamesView: "abiertos",
   gameFilters: { zone: null, myLevel: true },
@@ -37,7 +49,29 @@ function esc(value) {
 }
 
 function persist() {
-  saveState(state);
+  if (session) saveLocal(session.user.id, state);
+}
+
+/** Vuelve a leer del servidor perfiles, partidos y matches. */
+async function refresh() {
+  if (!session) return;
+  const data = await remote.fetchAll(session.user.id);
+  Object.assign(state, data);
+  render();
+  runAlerts();
+}
+
+/** Ejecuta una operación en el servidor, recarga los datos y avisa si falla. */
+async function serverAction(fn, success) {
+  try {
+    const result = await fn();
+    await refresh();
+    if (success) toast(success);
+    return { ok: true, result };
+  } catch (err) {
+    toast(err.message);
+    return { ok: false, error: err };
+  }
 }
 
 function commit(fn) {
@@ -156,6 +190,24 @@ const TABS = [
 
 function render() {
   const app = $("#app");
+  if (ui.loading) {
+    app.innerHTML = `<main class="onboarding"><div class="hero"><img src="icons/icon.svg" alt="" width="72" height="72"><p>Cargando…</p></div></main>`;
+    return;
+  }
+  if (!session) {
+    app.innerHTML = renderAuth();
+    return;
+  }
+  if (ui.loadError) {
+    app.innerHTML = `
+      <main class="onboarding"><div class="card">
+        <h2>No se han podido cargar los datos</h2>
+        <p>${esc(ui.loadError)}</p>
+        <button class="btn primary block" data-action="retry">Reintentar</button>
+        <button class="btn block" data-action="logout">Cerrar sesión</button>
+      </div></main>`;
+    return;
+  }
   if (!state.profile) {
     app.innerHTML = renderOnboarding();
     return;
@@ -192,9 +244,14 @@ function render() {
 function profileFields(p = {}) {
   const level = p.level ?? 3;
   return `
-    <label class="field">Nombre
-      <input name="name" required maxlength="40" value="${esc(p.name)}" placeholder="Cómo te verán los demás">
-    </label>
+    <div class="field-row name-age">
+      <label class="field">Nombre
+        <input name="name" required maxlength="40" value="${esc(p.name)}" placeholder="Cómo te verán los demás">
+      </label>
+      <label class="field">Edad
+        <input type="number" name="age" min="12" max="99" inputmode="numeric" value="${esc(p.age ?? "")}" placeholder="—">
+      </label>
+    </div>
     <label class="field">Tu nivel: <strong data-level-out>${fmtLevel(level)} · ${levelLabel(level)}</strong>
       <input type="range" name="level" min="1" max="7" step="0.25" value="${level}" data-level-range>
       <small>Orientativo: 1–2 empiezas, 3 juegas a menudo, 4 compites en tu club, 5 o más juegas torneos. Se ajustará solo con tus resultados.</small>
@@ -225,8 +282,10 @@ function profileFields(p = {}) {
 
 function readProfileForm(form) {
   const data = new FormData(form);
+  const age = String(data.get("age") || "").trim();
   return {
     name: String(data.get("name")).trim(),
+    age: age ? Number(age) : null,
     level: Number(data.get("level")),
     zone: String(data.get("zone")),
     position: String(data.get("position")),
@@ -238,7 +297,8 @@ function readProfileForm(form) {
   };
 }
 
-function renderOnboarding() {
+function renderAuth() {
+  const signup = ui.authMode === "signup";
   return `
     <main class="onboarding">
       <div class="hero">
@@ -246,8 +306,33 @@ function renderOnboarding() {
         <h1>Pádel Match</h1>
         <p>Encuentra compañeros de tu nivel, completa partidos, organiza torneos y lleva el marcador.</p>
       </div>
+      ${ui.authNotice ? `<div class="card notice">${ui.authNotice}</div>` : ""}
+      <form class="card form" data-form="auth">
+        <div class="segmented">
+          <button type="button" class="${signup ? "" : "active"}" data-action="auth-mode" data-value="login">Entrar</button>
+          <button type="button" class="${signup ? "active" : ""}" data-action="auth-mode" data-value="signup">Crear cuenta</button>
+        </div>
+        <label class="field">Email
+          <input type="email" name="email" required autocomplete="email" inputmode="email" placeholder="tu@email.com">
+        </label>
+        <label class="field">Contraseña
+          <input type="password" name="password" required minlength="6" autocomplete="${signup ? "new-password" : "current-password"}" placeholder="${signup ? "Mínimo 6 caracteres" : ""}">
+        </label>
+        <div class="form-actions"><button class="btn primary block" type="submit">${signup ? "Crear cuenta" : "Entrar"}</button></div>
+      </form>
+    </main>`;
+}
+
+function renderOnboarding() {
+  return `
+    <main class="onboarding">
+      <div class="hero">
+        <img src="icons/icon.svg" alt="" width="72" height="72">
+        <h1>¡Bienvenido!</h1>
+        <p>Último paso: cuéntanos cómo juegas para encontrarte compañeros y partidos a tu medida.</p>
+      </div>
       <form class="card form" data-form="onboarding">
-        <h2>Crea tu perfil de jugador</h2>
+        <h2>Tu perfil de jugador</h2>
         ${profileFields()}
         <div class="form-actions"><button class="btn primary block" type="submit">Empezar a jugar</button></div>
       </form>
@@ -280,7 +365,7 @@ function renderPlayerCard({ player: p, aff }, top) {
           <span>${aff.score}%</span><small>afinidad</small>
         </div>
       </div>
-      <h2>${esc(p.name)}, ${p.age}</h2>
+      <h2>${esc(p.name)}${p.age ? `, ${p.age}` : ""}</h2>
       <p class="meta">
         <span class="level-pill">Nivel ${fmtLevel(p.level)}</span>
         ${esc(p.zone)} · ${esc(labelOf(POSITIONS, p.position))} · ${p.hand === "zurdo" ? "Zurdo" : "Diestro"}
@@ -314,9 +399,13 @@ function renderDiscover() {
       ${cards.length
         ? cards.slice(0, 2).reverse().map((c, i, arr) => renderPlayerCard(c, i === arr.length - 1)).join("")
         : `<div class="empty-deck card">
-            <p><strong>No hay más jugadores con estos filtros.</strong></p>
-            <p>Prueba a cambiar los filtros o vuelve a ver a quienes descartaste.</p>
-            <button class="btn" data-action="reset-passes">Volver a ver descartados</button>
+            ${state.players.length
+              ? `<p><strong>No hay más jugadores con estos filtros.</strong></p>
+                 <p>Prueba a cambiar los filtros, vuelve a ver a quienes descartaste o invita a tus amigos.</p>
+                 <button class="btn block" data-action="reset-passes">Volver a ver descartados</button>`
+              : `<p><strong>Todavía no hay más jugadores.</strong></p>
+                 <p>¡Eres de los primeros! Invita a tus compañeros de pádel para empezar a hacer matches.</p>`}
+            <button class="btn primary block" data-action="share-app">Invitar amigos</button>
           </div>`}
     </div>
     ${cards.length ? `
@@ -324,8 +413,7 @@ function renderDiscover() {
         <button class="round-btn pass" data-action="swipe" data-dir="pass" aria-label="Paso">✕</button>
         <button class="round-btn like" data-action="swipe" data-dir="like" aria-label="Me gusta">♥</button>
       </div>
-      <p class="hint">Desliza a la derecha si te gustaría jugar con esta persona, a la izquierda para pasar.</p>` : ""}
-    <p class="demo-note">Jugadores de demostración generados en tu zona. Al conectar el servidor aparecerán jugadores reales.</p>`;
+      <p class="hint">Desliza a la derecha si te gustaría jugar con esta persona, a la izquierda para pasar.</p>` : ""}`;
 }
 
 function attachSwipe() {
@@ -371,17 +459,23 @@ function flyOut(dir) {
   setTimeout(() => swipe(card.dataset.id, dir), 200);
 }
 
-function swipe(id, dir) {
+async function swipe(id, dir) {
   const p = person(id);
-  let matched = false;
-  commit(() => {
-    state.swipes[id] = dir;
-    if (dir === "like" && likesBack(state.profile.id, id, affinity(state.profile, p).score)) {
-      if (!state.connections.includes(id)) state.connections.push(id);
-      matched = true;
-    }
-  });
+  // La tarjeta desaparece al momento; si el servidor falla, vuelve a salir.
+  state.swipes[id] = dir;
+  render();
+  let matched;
+  try {
+    matched = await remote.swipe(id, dir === "like");
+  } catch (err) {
+    delete state.swipes[id];
+    render();
+    toast(err.message);
+    return;
+  }
   if (matched) {
+    if (!state.connections.includes(id)) state.connections.push(id);
+    render();
     const aff = affinity(state.profile, p);
     openModal(`
       <div class="match-pop">
@@ -403,7 +497,7 @@ function openPlayer(id) {
   openModal(`
     <div class="player-detail">
       <div class="card-head">${avatar(p, "xl")}<div class="affinity" style="--pct:${aff.score}"><span>${aff.score}%</span><small>afinidad</small></div></div>
-      <h2>${esc(p.name)}, ${p.age}</h2>
+      <h2>${esc(p.name)}${p.age ? `, ${p.age}` : ""}</h2>
       <p class="meta"><span class="level-pill">Nivel ${fmtLevel(p.level)}</span> ${esc(p.zone)} · ${esc(labelOf(POSITIONS, p.position))}${p.federated ? " · Federado" : ""}</p>
       <p class="bio">${esc(p.bio)}</p>
       <div class="chips">${chips(p.objectives, OBJECTIVES, "accent")}</div>
@@ -550,10 +644,9 @@ function openNewGame(inviteId) {
     </form>`);
 }
 
-function createGame(form) {
+async function createGame(form) {
   const data = new FormData(form);
   const game = {
-    id: uid("game"),
     date: String(data.get("date")),
     time: String(data.get("time")),
     club: String(data.get("club")).trim(),
@@ -561,34 +654,30 @@ function createGame(form) {
     minLevel: Number(data.get("minLevel")),
     maxLevel: Number(data.get("maxLevel")),
     competitive: data.get("competitive") === "on",
-    slots: [state.profile.id, null, null, null],
-    createdBy: state.profile.id,
-    result: null
+    // Tu primer invitado va a tu lado; el resto, enfrente.
+    invites: data.getAll("invite").map(String)
   };
-  const invites = data.getAll("invite").map(String);
   if (!game.club) return formError(form, "Indica el club");
   if (gameDate(game) <= new Date()) return formError(form, "El partido tiene que ser en el futuro");
   if (game.minLevel > game.maxLevel) return formError(form, "El nivel mínimo no puede ser mayor que el máximo");
-  if (invites.length > 3) return formError(form, "Solo caben 3 jugadores más");
-  // Tu compañero va a tu lado; el resto, enfrente.
-  invites.forEach((id, i) => (game.slots[[1, 2, 3][i]] = id));
+  if (game.invites.length > 3) return formError(form, "Solo caben 3 jugadores más");
+  try {
+    await remote.createGame({ ...game, startsAt: gameDate(game).toISOString() });
+  } catch (err) {
+    return formError(form, err.message);
+  }
   closeModal();
   ui.tab = "partidos";
   ui.gamesView = "mios";
-  commit(() => state.games.push(game));
-  runAlerts();
-  toast(invites.length ? "Partido publicado e invitaciones enviadas" : "Partido publicado");
+  await refresh().catch((err) => toast(err.message));
+  toast(game.invites.length ? "Partido publicado con tus invitados" : "Partido publicado");
 }
 
-function joinGame(id, slot) {
+async function joinGame(id, slot) {
+  const { ok } = await serverAction(() => remote.joinGame(id, slot ?? null));
+  if (!ok) return;
   const game = state.games.find((g) => g.id === id);
-  const me = state.profile.id;
-  if (!game || game.slots.includes(me)) return;
-  const index = slot ?? game.slots.indexOf(null);
-  if (index < 0 || game.slots[index] !== null) return toast("Ese hueco ya está ocupado");
-  commit(() => (game.slots[index] = me));
-  toast(freeSlots(game) === 0 ? "¡Partido completo! Os vemos en la pista" : "Te has apuntado al partido");
-  runAlerts();
+  toast(game && freeSlots(game) === 0 ? "¡Partido completo! Os vemos en la pista" : "Te has apuntado al partido");
 }
 
 function openResultForm(id) {
@@ -614,7 +703,7 @@ function openResultForm(id) {
     </form>`);
 }
 
-function saveResult(form) {
+async function saveResult(form) {
   const game = state.games.find((g) => g.id === form.dataset.id);
   const data = new FormData(form);
   const sets = [];
@@ -624,27 +713,16 @@ function saveResult(form) {
     if (a === "" && b === "") continue;
     sets.push([Number(a), Number(b)]);
   }
-  const players = game.slots.map((id) => {
-    const p = person(id);
-    return { id, level: p.level, matches: p.matches || 0 };
-  });
+  const invalid = validateResult(sets);
+  if (invalid) return formError(form, invalid);
+  // El servidor valida de nuevo y calcula los niveles: nadie puede inventárselos.
   let changes;
   try {
-    changes = game.competitive
-      ? levelChanges(players, sets)
-      : levelChanges(players, sets).map((c) => ({ ...c, after: c.before, delta: 0 }));
+    changes = await remote.submitResult(game.id, sets);
   } catch (err) {
     return formError(form, err.message);
   }
-  commit(() => {
-    game.result = { sets, changes };
-    for (const c of changes) {
-      const p = person(c.id);
-      p.level = c.after;
-      p.matches = (p.matches || 0) + 1;
-      if (p === state.profile) p.levelHistory.push({ date: game.date, level: c.after });
-    }
-  });
+  await refresh().catch((err) => toast(err.message));
   const mine = changes.find((c) => c.id === state.profile.id);
   openModal(`
     <div class="result-pop">
@@ -1023,8 +1101,11 @@ function renderProfile() {
 
     <section class="card">
       <h3>Ajustes</h3>
+      <p class="meta">Has entrado como ${esc(session.user.email)}</p>
       <button class="btn block" data-action="enable-notifications">Activar avisos en el móvil</button>
-      <button class="btn danger block" data-action="reset-all">Borrar todos mis datos</button>
+      <button class="btn block" data-action="logout">Cerrar sesión</button>
+      <button class="btn danger block" data-action="reset-all">Borrar mi cuenta</button>
+      <p class="meta">Los torneos, el diario y el marcador se guardan en este dispositivo.</p>
     </section>`;
 }
 
@@ -1118,10 +1199,23 @@ const actions = {
     render();
   },
   swipe: (el) => flyOut(el.dataset.dir),
-  "reset-passes": () =>
-    commit(() => {
-      for (const [id, dir] of Object.entries(state.swipes)) if (dir === "pass") delete state.swipes[id];
-    }),
+  "reset-passes": () => serverAction(() => remote.resetPasses(session.user.id)),
+  "share-app": async () => {
+    const invite = {
+      title: "Pádel Match",
+      text: "Únete a Pádel Match para encontrar compañeros de pádel de tu nivel y completar partidos",
+      url: location.origin + location.pathname
+    };
+    try {
+      if (navigator.share) await navigator.share(invite);
+      else {
+        await navigator.clipboard.writeText(`${invite.text}: ${invite.url}`);
+        toast("Enlace copiado: pégalo en WhatsApp o donde quieras");
+      }
+    } catch {
+      // Compartir cancelado por el usuario.
+    }
+  },
   "open-player": (el) => openPlayer(el.dataset.id),
   "new-game": (el) => openNewGame(el.dataset.invite),
   "games-view": (el) => {
@@ -1129,15 +1223,10 @@ const actions = {
     render();
   },
   join: (el) => joinGame(el.dataset.id, el.dataset.slot !== undefined ? Number(el.dataset.slot) : undefined),
-  leave: (el) => {
-    const game = state.games.find((g) => g.id === el.dataset.id);
-    commit(() => (game.slots[game.slots.indexOf(state.profile.id)] = null));
-    toast("Has salido del partido");
-  },
+  leave: (el) => serverAction(() => remote.leaveGame(el.dataset.id), "Has salido del partido"),
   "cancel-game": (el) => {
-    if (!confirm("¿Cancelar el partido? Se avisará al resto de jugadores.")) return;
-    commit(() => (state.games = state.games.filter((g) => g.id !== el.dataset.id)));
-    toast("Partido cancelado");
+    if (!confirm("¿Cancelar el partido? Desaparecerá para todos los jugadores apuntados.")) return;
+    return serverAction(() => remote.cancelGame(el.dataset.id), "Partido cancelado");
   },
   "result-form": (el) => openResultForm(el.dataset.id),
   "new-tournament": openNewTournament,
@@ -1216,47 +1305,75 @@ const actions = {
     toast(result === "granted" ? "Avisos activados" : "No se han activado los avisos");
     if (result === "granted") closeModal();
   },
-  "reset-all": () => {
-    if (!confirm("Se borrarán tu perfil, partidos, torneos y diario de este dispositivo. ¿Seguro?")) return;
-    clearState();
-    location.reload();
+  "auth-mode": (el) => {
+    ui.authMode = el.dataset.value;
+    ui.authNotice = null;
+    render();
+  },
+  retry: () => boot(),
+  logout: async () => {
+    await remote.signOut();
+  },
+  "reset-all": async () => {
+    if (!confirm("Se borrará tu cuenta: perfil, nivel, partidos que organizas, matches, torneos y diario. No se puede deshacer. ¿Seguro?")) return;
+    try {
+      await remote.deleteAccount();
+    } catch (err) {
+      return toast(err.message);
+    }
+    clearLocal(session.user.id);
+    await remote.signOut();
   }
 };
 
 const forms = {
-  onboarding: (form) => {
+  auth: async (form) => {
+    const email = form.elements.email.value.trim();
+    const password = form.elements.password.value;
+    try {
+      if (ui.authMode === "signup") {
+        const { needsConfirmation } = await remote.signUp(email, password);
+        if (needsConfirmation) {
+          ui.authMode = "login";
+          ui.authNotice = `<strong>¡Cuenta creada!</strong> Te hemos enviado un email a ${esc(email)}. Pulsa el enlace para confirmarla y después entra aquí. Si no lo ves, mira en spam.`;
+          render();
+        }
+      } else {
+        await remote.signIn(email, password);
+      }
+    } catch (err) {
+      formError(form, err.message);
+    }
+  },
+  onboarding: async (form) => {
     const data = readProfileForm(form);
     if (!data.name) return formError(form, "Escribe tu nombre");
     if (!data.objectives.length) return formError(form, "Elige al menos un objetivo");
-    const profile = {
-      id: "me",
-      ...data,
-      level: roundLevel(data.level),
-      matches: 0,
-      levelHistory: [{ date: isoDate(0), level: roundLevel(data.level) }]
-    };
-    const community = seedCommunity(profile);
-    commit(() => {
-      state.profile = profile;
-      state.players = community.players;
-      state.games = community.games;
-    });
+    try {
+      await remote.saveProfile(session.user.id, { ...data, level: roundLevel(data.level) }, true);
+      await refresh();
+    } catch (err) {
+      return formError(form, err.message);
+    }
     window.scrollTo(0, 0);
-    runAlerts();
   },
-  "edit-profile": (form) => {
+  "edit-profile": async (form) => {
     const data = readProfileForm(form);
     if (!data.name) return formError(form, "Escribe tu nombre");
     if (!data.objectives.length) return formError(form, "Elige al menos un objetivo");
     const p = state.profile;
     // Tras el primer partido el nivel lo marcan los resultados, no la autoevaluación.
-    const level = p.matches ? p.level : roundLevel(data.level);
+    const changes = { ...data };
+    if (p.matches) delete changes.level;
+    else changes.level = roundLevel(data.level);
+    try {
+      await remote.saveProfile(session.user.id, changes, false);
+      await refresh();
+    } catch (err) {
+      return formError(form, err.message);
+    }
     closeModal();
-    commit(() => {
-      Object.assign(p, data, { level });
-      if (!p.matches) p.levelHistory = [{ date: isoDate(0), level }];
-    });
-    toast(p.matches && data.level !== level ? "Perfil guardado. Tu nivel ya lo ajustan tus resultados" : "Perfil guardado");
+    toast(p.matches && roundLevel(data.level) !== p.level ? "Perfil guardado. Tu nivel ya lo ajustan tus resultados" : "Perfil guardado");
   },
   "create-game": createGame,
   result: saveResult,
@@ -1339,7 +1456,15 @@ document.addEventListener("click", (e) => {
   const handler = actions[el.dataset.action];
   if (handler) {
     e.preventDefault();
-    handler(el);
+    const pending = handler(el);
+    if (pending instanceof Promise && el.isConnected) {
+      el.disabled = true;
+      el.classList.add("busy");
+      pending.finally(() => {
+        el.disabled = false;
+        el.classList.remove("busy");
+      });
+    }
   }
 });
 
@@ -1347,7 +1472,17 @@ document.addEventListener("submit", (e) => {
   const form = e.target.closest("[data-form]");
   if (!form) return;
   e.preventDefault();
-  forms[form.dataset.form]?.(form);
+  const button = form.querySelector('[type="submit"]');
+  if (button?.disabled) return;
+  const pending = forms[form.dataset.form]?.(form);
+  if (pending instanceof Promise && button) {
+    button.disabled = true;
+    button.classList.add("busy");
+    pending.finally(() => {
+      button.disabled = false;
+      button.classList.remove("busy");
+    });
+  }
 });
 
 document.addEventListener("change", (e) => {
@@ -1374,9 +1509,44 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
-render();
-runAlerts();
-setInterval(runAlerts, 60 * 1000);
+/** Arranque: recupera la sesión y carga los datos del servidor. */
+async function boot() {
+  ui.loading = true;
+  ui.loadError = null;
+  render();
+  try {
+    session = await remote.getSession();
+    state = session ? { ...emptyState(), ...loadLocal(session.user.id) } : emptyState();
+    if (session) await refresh();
+  } catch (err) {
+    ui.loadError = err.message;
+  }
+  ui.loading = false;
+  render();
+}
+
+remote.onAuthChange((event, newSession) => {
+  const changedUser = (newSession?.user.id ?? null) !== (session?.user.id ?? null);
+  if ((event === "SIGNED_IN" || event === "SIGNED_OUT") && changedUser) {
+    closeModal();
+    ui.tab = "descubrir";
+    ui.authNotice = null;
+    boot();
+  } else if (newSession) {
+    session = newSession;
+  }
+});
+
+/** No recarga mientras escribes en un formulario o hay una ventana abierta. */
+function quietRefresh() {
+  if (!session || !state.profile || !$("#modal").hidden || document.hidden) return;
+  if (document.activeElement?.closest("input, select, textarea")) return;
+  refresh().catch(() => {});
+}
+
+boot();
+setInterval(quietRefresh, 60 * 1000);
+document.addEventListener("visibilitychange", quietRefresh);
 
 if ("serviceWorker" in navigator && location.protocol !== "file:") {
   navigator.serviceWorker.register("sw.js").catch(() => {});

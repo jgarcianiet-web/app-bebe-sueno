@@ -118,6 +118,9 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .btn.block { width: 100%; margin-bottom: 10px; }
 .btn.small { min-height: 34px; padding: 6px 12px; font-size: .85rem; }
 .btn:disabled { opacity: .45; cursor: default; }
+.btn.busy { opacity: .7; cursor: progress; }
+.notice { border-color: var(--brand-2); background: color-mix(in srgb, var(--brand-2) 10%, var(--surface)); }
+.field-row.name-age { grid-template-columns: 1fr 90px; }
 
 .link-btn { border: 0; background: none; color: var(--accent); font-weight: 600; padding: 8px 0; cursor: pointer; }
 .link-btn.small { font-size: .8rem; padding: 2px 0; }

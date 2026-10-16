@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { levelChanges, validateResult, isValidSet, expectedScore } from "../www/js/level.js";
-import { affinity, likesBack } from "../www/js/affinity.js";
+import { affinity } from "../www/js/affinity.js";
 import { createScorer, addPoint, pointLabels, situation } from "../www/js/scoring.js";
 import {
   americanoSchedule, americanoStandings, americanoDefaultRounds, seededRandom,
@@ -51,8 +51,6 @@ test("afinidad máxima con un jugador idéntico y complementario", () => {
   const far = { id: "y", level: 6, zone: "Sevilla", objectives: ["amistosos"], availability: ["mananas"], position: "drive" };
   assert.equal(affinity(me, twin).score, 100);
   assert.ok(affinity(me, far).score < 10);
-  assert.equal(likesBack("me", "x", 100), true);
-  assert.equal(likesBack("me", "y", 40), likesBack("me", "y", 40));
 });
 
 test("marcador: juego normal, punto de oro y ventajas", () => {

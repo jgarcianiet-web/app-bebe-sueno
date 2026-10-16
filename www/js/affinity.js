@@ -77,25 +77,3 @@ export function affinity(me, other) {
   const score = Math.round(levelPts + zonePts + objectivePts + availabilityPts + 5 * fit);
   return { score: Math.min(100, Math.max(0, score)), reasons };
 }
-
-/**
- * Hash estable de una cadena (FNV-1a de 32 bits). Sirve para que las
- * decisiones simuladas de los jugadores de demostración sean siempre iguales.
- */
-export function hashString(str) {
-  let h = 0x811c9dc5;
-  for (let i = 0; i < str.length; i++) {
-    h ^= str.charCodeAt(i);
-    h = Math.imul(h, 0x01000193);
-  }
-  return h >>> 0;
-}
-
-/**
- * Simula si un jugador de demostración también te da "me gusta".
- * Cuanta más afinidad, más probable; siempre la misma respuesta para la
- * misma pareja de jugadores.
- */
-export function likesBack(meId, otherId, affinityScore) {
-  return hashString(`${meId}:${otherId}`) % 100 < Math.max(15, affinityScore);
-}
