@@ -1,44 +1,57 @@
-/* Service worker: permite usar la app sin conexión */
-const CACHE = "bebe-sueno-v6";
-const ASSETS = [
+/**
+ * Service worker: primero la red y, si no hay conexión, la copia guardada.
+ * Así siempre se carga la última versión y la app sigue abriendo sin cobertura
+ * (por ejemplo, en la pista).
+ */
+
+const CACHE = "padel-v2";
+const SHELL = [
   "./",
-  "./index.html",
-  "./css/styles.css",
-  "./js/native.js",
-  "./js/app.js",
-  "./js/tips.js",
-  "./js/sync.js",
-  "./js/assistant.js",
-  "./js/ai.js",
-  "./manifest.webmanifest",
-  "./icons/icon.svg"
+  "index.html",
+  "manifest.webmanifest",
+  "css/styles.css",
+  "icons/icon.svg",
+  "vendor/supabase.js",
+  "js/app.js",
+  "js/config.js",
+  "js/remote.js",
+  "js/store.js",
+  "js/level.js",
+  "js/affinity.js",
+  "js/scoring.js",
+  "js/tournaments.js",
+  "js/alerts.js"
 ];
 
-self.addEventListener("install", (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)));
-  self.skipWaiting();
+self.addEventListener("install", (event) => {
+  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(SHELL)).then(() => self.skipWaiting()));
 });
 
-self.addEventListener("activate", (e) => {
-  e.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))
-    )
+self.addEventListener("activate", (event) => {
+  event.waitUntil(
+    caches.keys()
+      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+      .then(() => self.clients.claim())
   );
-  self.clients.claim();
 });
 
-self.addEventListener("fetch", (e) => {
-  if (e.request.method !== "GET") return;
-  // La API de sincronización nunca se cachea: siempre datos frescos
-  if (new URL(e.request.url).origin !== location.origin) return;
-  e.respondWith(
-    fetch(e.request)
-      .then((res) => {
-        const copy = res.clone();
-        caches.open(CACHE).then((c) => c.put(e.request, copy));
-        return res;
+self.addEventListener("fetch", (event) => {
+  const { request } = event;
+  if (request.method !== "GET" || new URL(request.url).origin !== self.location.origin) return;
+  event.respondWith(
+    fetch(request)
+      .then((response) => {
+        const copy = response.clone();
+        caches.open(CACHE).then((cache) => cache.put(request, copy));
+        return response;
       })
-      .catch(() => caches.match(e.request).then((r) => r || caches.match("./index.html")))
+      .catch(() => caches.match(request).then((hit) => hit || caches.match("index.html")))
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  event.waitUntil(
+    self.clients.matchAll({ type: "window" }).then((list) => (list[0] ? list[0].focus() : self.clients.openWindow("./")))
   );
 });

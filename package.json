@@ -1,26 +1,11 @@
 {
-  "name": "sueno-bebe",
-  "version": "1.0.0",
+  "name": "app-padel",
+  "version": "0.1.0",
   "private": true,
-  "description": "Sueño Bebé — control del sueño del bebé con consejos personalizados",
+  "description": "App de pádel: encuentra compañeros, organiza partidos, torneos y lleva el marcador",
+  "type": "module",
   "scripts": {
-    "sync": "cap sync",
-    "android": "cap sync android && cap open android",
-    "ios": "cap sync ios && cap open ios",
-    "serve": "python3 -m http.server 8765 --directory www"
-  },
-  "dependencies": {
-    "@capacitor/android": "^7.0.0",
-    "@capacitor/app": "^7.0.0",
-    "@capacitor/core": "^7.0.0",
-    "@capacitor/ios": "^7.0.0",
-    "@capacitor/local-notifications": "^7.0.0",
-    "@capacitor/share": "^7.0.0",
-    "@capacitor/splash-screen": "^7.0.0",
-    "@capacitor/status-bar": "^7.0.0"
-  },
-  "devDependencies": {
-    "@capacitor/assets": "^3.0.5",
-    "@capacitor/cli": "^7.0.0"
+    "serve": "python3 -m http.server 8765 --directory www",
+    "test": "node --test"
   }
 }
