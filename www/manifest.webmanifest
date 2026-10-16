@@ -1,0 +1,14 @@
+{
+  "name": "Pádel Match",
+  "short_name": "Pádel Match",
+  "description": "Encuentra compañeros de pádel de tu nivel, organiza partidos y torneos y lleva el marcador.",
+  "lang": "es",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#F3F6F2",
+  "theme_color": "#0E3B2E",
+  "icons": [
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
