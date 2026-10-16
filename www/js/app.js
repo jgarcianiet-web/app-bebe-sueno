@@ -1,7 +1,7 @@
 import { loadState, saveState, clearState, seedCommunity, uid, isoDate, ZONES, clubsFor } from "./store.js";
 import { levelChanges, levelLabel, roundLevel, RELIABLE_AFTER, LEVEL_MIN, LEVEL_MAX } from "./level.js";
 import { affinity, likesBack, OBJECTIVES, AVAILABILITY, POSITIONS, labelOf } from "./affinity.js";
-import { createScorer, addPoint, pointLabels, situation, percent } from "./scoring.js";
+import { createScorer, addPoint, pointLabels, situation, percent, deuceMode, DEUCE_MODES } from "./scoring.js";
 import {
   americanoSchedule, americanoDefaultRounds, americanoStandings, roundRobin, leagueStandings,
   createBracket, setBracketWinner, clearBracketWinner, bracketChampion, roundName, parseSets
@@ -876,7 +876,15 @@ function renderScorer() {
           <label class="field">Formato <select name="bestOf"><option value="3">Al mejor de 3 sets</option><option value="1">A 1 set</option></select></label>
           <label class="field">Saca primero <select name="server"><option value="A">Pareja 1</option><option value="B">Pareja 2</option></select></label>
         </div>
-        <label class="check"><input type="checkbox" name="golden" checked> Punto de oro (sin ventajas)</label>
+        <fieldset class="field"><legend>En iguales (40-40)</legend>
+          <div class="mode-picker">
+            <label class="mode"><input type="radio" name="deuceMode" value="golden" checked><span><strong>Punto de oro</strong><small>El siguiente punto decide el juego</small></span></label>
+            <label class="mode"><input type="radio" name="deuceMode" value="advantage"><span><strong>Ventajas</strong><small>Hay que ganar dos puntos seguidos</small></span></label>
+            <label class="mode"><input type="radio" name="deuceMode" value="star"><span><strong>Star point</strong><small>Hasta dos ventajas; al tercer iguales, punto decisivo</small></span></label>
+          </div>
+        </fieldset>
+        <label class="check"><input type="checkbox" name="superTiebreak"> Set decisivo a super tie-break (a 10 puntos)</label>
+        <p class="meta">Con 6-6 en un set se juega tie-break a 7 puntos.</p>
         <div class="form-actions"><button class="btn primary block" type="submit">Empezar partido</button></div>
       </form>
       ${state.scoreHistory.length ? `
@@ -904,6 +912,7 @@ function renderScorer() {
   const totalPoints = st.pointsWon.A + st.pointsWon.B;
   return `
     <section class="scoreboard">
+      <p class="mode-line">${DEUCE_MODES.find((m) => m.id === deuceMode(s.config)).label}${s.config.superTiebreak ? " · super tie-break decisivo" : ""}</p>
       ${row("A")}${row("B")}
       ${sit ? `<p class="situation">${sit}</p>` : ""}
       ${s.finished ? `<p class="situation done">🏆 Gana ${esc(names[s.winner])}</p>` : ""}
@@ -929,7 +938,7 @@ function renderScorer() {
           ${statRow("Puntos ganados", `${st.pointsWon.A} (${percent(st.pointsWon.A, totalPoints)}%)`, `${st.pointsWon.B} (${percent(st.pointsWon.B, totalPoints)}%)`)}
           ${statRow("Puntos ganados con su saque", `${percent(st.serveWon.A, st.servePlayed.A)}%`, `${percent(st.serveWon.B, st.servePlayed.B)}%`)}
           ${statRow("Roturas", st.breaks.A, st.breaks.B)}
-          ${s.config.goldenPoint ? statRow("Puntos de oro ganados", st.goldenPoints.A, st.goldenPoints.B) : ""}
+          ${deuceMode(s.config) !== "advantage" ? statRow(deuceMode(s.config) === "star" ? "Star points ganados" : "Puntos de oro ganados", st.goldenPoints.A, st.goldenPoints.B) : ""}
           ${statRow("Mejor racha", st.bestStreak.A, st.bestStreak.B)}
         </tbody>
       </table>
@@ -1268,7 +1277,12 @@ const forms = {
   "scorer-setup": (form) => {
     const data = new FormData(form);
     const names = { A: String(data.get("a")).trim() || "Pareja 1", B: String(data.get("b")).trim() || "Pareja 2" };
-    const initial = createScorer({ goldenPoint: data.get("golden") === "on", bestOf: Number(data.get("bestOf")), firstServer: String(data.get("server")) });
+    const initial = createScorer({
+      deuceMode: String(data.get("deuceMode")),
+      bestOf: Number(data.get("bestOf")),
+      firstServer: String(data.get("server")),
+      superTiebreak: data.get("superTiebreak") === "on"
+    });
     commit(() => (state.scorer = { names, history: [initial] }));
   },
   diary: (form) => {

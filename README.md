@@ -29,7 +29,12 @@ Es una web app (PWA) en HTML, CSS y JavaScript puro, sin compilación, pensada p
 - **Eliminatoria:** cuadro con cabezas de serie. Las mejores parejas pasan directamente a la siguiente ronda si no hay parejas suficientes para llenar el cuadro. Se toca la pareja ganadora para que avance y se puede deshacer.
 
 ### Marcador
-- Cuenta punto a punto: 15-30-40, **punto de oro o ventajas**, juegos, **tie-break a 7 con 6-6**, a 1 o 3 sets.
+- Cuenta punto a punto: 15-30-40, juegos, **tie-break a 7 con 6-6**, a 1 o 3 sets.
+- Tres modos para el 40-40:
+  - **Punto de oro:** el siguiente punto decide el juego.
+  - **Ventajas:** hay que ganar dos puntos seguidos.
+  - **Star point:** se juegan hasta dos ventajas y, si se llega a iguales por tercera vez, un punto decisivo cierra el juego.
+- Opción de jugar el set decisivo como **super tie-break a 10**.
 - Indica quién saca, siguiendo las reglas del tie-break.
 - Botón para deshacer.
 - **Estadísticas:** puntos ganados, % de puntos ganados con el saque, roturas, puntos de oro y mejor racha.

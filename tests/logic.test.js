@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 
 import { levelChanges, validateResult, isValidSet, expectedScore } from "../www/js/level.js";
 import { affinity, likesBack } from "../www/js/affinity.js";
-import { createScorer, addPoint, pointLabels } from "../www/js/scoring.js";
+import { createScorer, addPoint, pointLabels, situation } from "../www/js/scoring.js";
 import {
   americanoSchedule, americanoStandings, americanoDefaultRounds, seededRandom,
   roundRobin, leagueStandings, createBracket, setBracketWinner, bracketChampion, parseSets, seedOrder
@@ -56,7 +56,7 @@ test("afinidad máxima con un jugador idéntico y complementario", () => {
 });
 
 test("marcador: juego normal, punto de oro y ventajas", () => {
-  let s = createScorer({ goldenPoint: true });
+  let s = createScorer({ deuceMode: "golden" });
   for (let i = 0; i < 3; i++) s = addPoint(s, "A");
   for (let i = 0; i < 3; i++) s = addPoint(s, "B");
   assert.deepEqual(pointLabels(s), { A: "40", B: "40" });
@@ -65,7 +65,7 @@ test("marcador: juego normal, punto de oro y ventajas", () => {
   assert.equal(s.stats.breaks.B, 1, "B gana al resto: rotura");
   assert.equal(s.server, "B");
 
-  let adv = createScorer({ goldenPoint: false });
+  let adv = createScorer({ deuceMode: "advantage" });
   for (let i = 0; i < 3; i++) { adv = addPoint(adv, "A"); adv = addPoint(adv, "B"); }
   adv = addPoint(adv, "A");
   assert.deepEqual(pointLabels(adv), { A: "AD", B: "40" });
@@ -188,4 +188,64 @@ test("avisos: falta 1 jugador mañana a las 19:00", () => {
 
   const played = { ...game, id: "g3", date: "2026-10-15", slots: ["me", "a", "b", "c"], result: null };
   assert.match(computeAlerts({ profile: me, games: [played] }, now)[0].text, /^¿Cómo quedó el partido de ayer/);
+});
+
+const toDeuce = (s) => {
+  for (let i = 0; i < 3; i++) { s = addPoint(s, "A"); s = addPoint(s, "B"); }
+  return s;
+};
+
+test("star point: dos ventajas y, al tercer iguales, punto decisivo", () => {
+  let s = toDeuce(createScorer({ deuceMode: "star" }));
+  assert.equal(s.deuces, 1);
+  assert.match(situation(s), /^Iguales/);
+  s = addPoint(s, "A");
+  assert.equal(situation(s), "Ventaja");
+  s = addPoint(s, "B");
+  assert.equal(s.deuces, 2);
+  assert.equal(situation(s), "Iguales · si se vuelve a igualar, star point");
+  s = addPoint(s, "B");
+  s = addPoint(s, "A");
+  assert.equal(s.deuces, 3);
+  assert.match(situation(s), /^Star point/);
+  s = addPoint(s, "B");
+  assert.deepEqual(s.games, { A: 0, B: 1 }, "el star point cierra el juego sin ventaja");
+  assert.equal(s.stats.goldenPoints.B, 1);
+  assert.equal(s.deuces, 0, "el contador de iguales se reinicia en cada juego");
+
+  // Con ventaja convertida antes del tercer iguales, el juego acaba normal.
+  let t = toDeuce(createScorer({ deuceMode: "star" }));
+  t = addPoint(t, "A");
+  t = addPoint(t, "A");
+  assert.deepEqual(t.games, { A: 1, B: 0 });
+  assert.equal(t.stats.goldenPoints.A, 0);
+});
+
+test("super tie-break a 10 en el set decisivo", () => {
+  let s = createScorer({ superTiebreak: true });
+  s = winGames(s, "A", 6);
+  s = winGames(s, "B", 6);
+  assert.deepEqual(s.sets, [[6, 0], [0, 6]]);
+  assert.equal(s.tiebreak, true);
+  assert.equal(s.superTiebreak, true);
+  assert.equal(situation(s), "Super tie-break · a 10");
+  for (let i = 0; i < 9; i++) { s = addPoint(s, "A"); s = addPoint(s, "B"); }
+  s = addPoint(s, "A");
+  assert.equal(s.finished, false, "a 10-9 hay que ganar por dos");
+  s = addPoint(s, "A");
+  assert.equal(s.finished, true);
+  assert.equal(s.winner, "A");
+  assert.deepEqual(s.sets, [[6, 0], [0, 6], [11, 9]]);
+});
+
+test("sin super tie-break el tercer set se juega entero y los marcadores antiguos siguen funcionando", () => {
+  let s = createScorer();
+  s = winGames(s, "A", 6);
+  s = winGames(s, "B", 6);
+  assert.equal(s.tiebreak, false);
+  const legacy = { ...createScorer(), config: { goldenPoint: false, bestOf: 3 } };
+  delete legacy.deuces;
+  let l = toDeuce(legacy);
+  l = addPoint(l, "A");
+  assert.deepEqual(pointLabels(l), { A: "AD", B: "40" }, "un marcador guardado con ventajas sigue con ventajas");
 });

@@ -354,6 +354,19 @@ button.slot .avatar-empty { border-color: var(--accent); color: var(--accent); }
 .situation { text-align: center; margin: 8px 0 0; color: var(--ball); font-weight: 700; text-transform: uppercase; letter-spacing: .06em; font-size: .85rem; }
 .situation.done { font-size: 1.1rem; text-transform: none; }
 
+.mode-line { margin: 0 4px 4px; font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; opacity: .65; }
+
+.mode-picker { display: grid; gap: 8px; }
+.mode, .chip-check { position: relative; }
+.mode input { position: absolute; opacity: 0; pointer-events: none; }
+.mode span {
+  display: flex; flex-direction: column; padding: 10px 12px; cursor: pointer;
+  border: 1px solid var(--border); border-radius: 12px; font-weight: 400;
+}
+.mode small { color: var(--muted); font-size: .8rem; }
+.mode input:checked + span { border-color: var(--brand-2); background: color-mix(in srgb, var(--brand-2) 12%, transparent); box-shadow: inset 0 0 0 1px var(--brand-2); }
+.mode input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+
 .point-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
 .point-btn {
   min-height: 130px; border-radius: 20px; border: 0; cursor: pointer;
